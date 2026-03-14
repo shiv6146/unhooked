@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Unhooked Agent</title>
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    "Helvetica Neue", Arial, sans-serif;
+                background: linear-gradient(
+                    135deg,
+                    #0f172a 0%,
+                    #1e293b 50%,
+                    #0f172a 100%
+                );
+                color: #e2e8f0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
+
+            .container {
+                max-width: 800px;
+                width: 100%;
+                padding: 40px;
+                text-align: center;
+            }
+
+            /* Logo and Header */
+            .logo {
+                width: 100px;
+                height: 100px;
+                margin: 0 auto 24px;
+                background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+                border-radius: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 48px;
+                box-shadow: 0 20px 60px rgba(59, 130, 246, 0.3);
+                animation: float 3s ease-in-out infinite;
+            }
+
+            @keyframes float {
+                0%,
+                100% {
+                    transform: translateY(0px);
+                }
+                50% {
+                    transform: translateY(-10px);
+                }
+            }
+
+            h1 {
+                font-size: 36px;
+                font-weight: 800;
+                margin-bottom: 12px;
+                background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+
+            .subtitle {
+                font-size: 18px;
+                color: #94a3b8;
+                margin-bottom: 48px;
+            }
+
+            /* Status Section */
+            .status-section {
+                background: rgba(17, 24, 39, 0.6);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 32px;
+                margin-bottom: 32px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            }
+
+            .status-indicator {
+                display: inline-flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 24px;
+                background: rgba(34, 197, 94, 0.1);
+                border: 1px solid rgba(34, 197, 94, 0.3);
+                border-radius: 999px;
+                margin-bottom: 24px;
+                font-size: 16px;
+                font-weight: 600;
+                color: #22c55e;
+            }
+
+            .status-indicator.idle {
+                background: rgba(148, 163, 184, 0.1);
+                border-color: rgba(148, 163, 184, 0.3);
+                color: #94a3b8;
+            }
+
+            .pulse-dot {
+                width: 12px;
+                height: 12px;
+                background: #22c55e;
+                border-radius: 50%;
+                animation: pulse 2s infinite;
+            }
+
+            .status-indicator.idle .pulse-dot {
+                background: #94a3b8;
+                animation: none;
+            }
+
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+                }
+                50% {
+                    opacity: 0.8;
+                    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+                }
+            }
+
+            .status-message {
+                font-size: 20px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+
+            .status-detail {
+                font-size: 14px;
+                color: #94a3b8;
+            }
+
+            /* Progress Bar */
+            .progress-container {
+                width: 100%;
+                height: 8px;
+                background: rgba(71, 85, 105, 0.3);
+                border-radius: 4px;
+                overflow: hidden;
+                margin: 24px 0;
+            }
+
+            .progress-bar {
+                height: 100%;
+                background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+                border-radius: 4px;
+                width: 0%;
+                transition: width 0.5s ease;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .progress-bar::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 0;
+                background: linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(255, 255, 255, 0.3),
+                    transparent
+                );
+                animation: shimmer 2s infinite;
+            }
+
+            @keyframes shimmer {
+                0% {
+                    transform: translateX(-100%);
+                }
+                100% {
+                    transform: translateX(100%);
+                }
+            }
+
+            /* Stats Grid */
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 16px;
+                margin: 32px 0;
+            }
+
+            .stat-card {
+                background: rgba(11, 18, 32, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                padding: 20px;
+                text-align: center;
+                transition: all 0.3s ease;
+            }
+
+            .stat-card:hover {
+                transform: translateY(-4px);
+                border-color: rgba(59, 130, 246, 0.3);
+                box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+            }
+
+            .stat-value {
+                font-size: 32px;
+                font-weight: 800;
+                color: #3b82f6;
+                margin-bottom: 8px;
+            }
+
+            .stat-label {
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: #64748b;
+                font-weight: 600;
+            }
+
+            /* Animated Background Circles */
+            .bg-circle {
+                position: fixed;
+                border-radius: 50%;
+                background: radial-gradient(
+                    circle,
+                    rgba(59, 130, 246, 0.1) 0%,
+                    transparent 70%
+                );
+                pointer-events: none;
+                z-index: -1;
+            }
+
+            .bg-circle-1 {
+                width: 600px;
+                height: 600px;
+                top: -200px;
+                left: -200px;
+                animation: drift 20s ease-in-out infinite;
+            }
+
+            .bg-circle-2 {
+                width: 400px;
+                height: 400px;
+                bottom: -100px;
+                right: -100px;
+                animation: drift 15s ease-in-out infinite reverse;
+            }
+
+            @keyframes drift {
+                0%,
+                100% {
+                    transform: translate(0, 0) scale(1);
+                }
+                33% {
+                    transform: translate(50px, -30px) scale(1.1);
+                }
+                66% {
+                    transform: translate(-30px, 50px) scale(0.9);
+                }
+            }
+
+            /* Schedule Info */
+            .schedule-info {
+                background: rgba(17, 24, 39, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 16px;
+                margin-top: 24px;
+                font-size: 14px;
+                color: #94a3b8;
+            }
+
+            .schedule-info strong {
+                color: #e2e8f0;
+            }
+
+            /* Footer */
+            .footer {
+                margin-top: 48px;
+                font-size: 13px;
+                color: #64748b;
+            }
+
+            /* Minimize hint */
+            .hint {
+                margin-top: 32px;
+                padding: 16px;
+                background: rgba(59, 130, 246, 0.1);
+                border: 1px solid rgba(59, 130, 246, 0.2);
+                border-radius: 12px;
+                font-size: 14px;
+                color: #94a3b8;
+            }
+
+            .hint strong {
+                color: #3b82f6;
+            }
+
+            /* Scrolling animation effect */
+            .scroll-indicator {
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                background: #3b82f6;
+                border-radius: 50%;
+                margin: 0 2px;
+                animation: bounce 1.4s infinite ease-in-out both;
+            }
+
+            .scroll-indicator:nth-child(1) {
+                animation-delay: -0.32s;
+            }
+
+            .scroll-indicator:nth-child(2) {
+                animation-delay: -0.16s;
+            }
+
+            @keyframes bounce {
+                0%,
+                80%,
+                100% {
+                    transform: scale(0);
+                    opacity: 0.5;
+                }
+                40% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Animated Background -->
+        <div class="bg-circle bg-circle-1"></div>
+        <div class="bg-circle bg-circle-2"></div>
+
+        <div class="container">
+            <!-- Logo and Header -->
+            <div class="logo">📜</div>
+            <h1>Unhooked Agent</h1>
+            <p class="subtitle">Your background scrolling assistant is ready</p>
+
+            <!-- Status Section -->
+            <div class="status-section">
+                <div id="statusIndicator" class="status-indicator idle">
+                    <span class="pulse-dot"></span>
+                    <span id="statusText">Idle</span>
+                </div>
+
+                <div class="status-message" id="statusMessage">
+                    Waiting for next session
+                </div>
+                <div class="status-detail" id="statusDetail">
+                    Agent is ready to scroll your feeds
+                </div>
+
+                <!-- Progress Bar (shown during scrolling) -->
+                <div
+                    id="progressContainer"
+                    class="progress-container"
+                    style="display: none"
+                >
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="scrollsCount">0</div>
+                        <div class="stat-label">Scrolls</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="postsCount">0</div>
+                        <div class="stat-label">Posts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sessionsCount">0</div>
+                        <div class="stat-label">Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="digestsCount">0</div>
+                        <div class="stat-label">Digests</div>
+                    </div>
+                </div>
+
+                <!-- Schedule Info -->
+                <div
+                    id="scheduleInfo"
+                    class="schedule-info"
+                    style="display: none"
+                >
+                    <strong>Next scheduled run:</strong>
+                    <span id="nextRun">--</span>
+                </div>
+            </div>
+
+            <!-- Hint -->
+            <div class="hint">
+                💡 <strong>Tip:</strong> You can minimize this window. The agent
+                will continue working in the background while you browse freely!
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+                Unhooked © 2024 | Background Scrolling Agent
+            </div>
+        </div>
+
+        <script src="agent.js"></script>
+    </body>
+</html>
