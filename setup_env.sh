@@ -3,10 +3,10 @@
 # Run this before loading the extension in Chrome.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/extension/_env.json"
+ENV_FILE="$SCRIPT_DIR/extension/env.json"
 
 if [ -z "$GEMINI_API_KEY" ]; then
-  echo "WARNING: GEMINI_API_KEY is not set. Creating empty _env.json."
+  echo "WARNING: GEMINI_API_KEY is not set. Creating empty env.json."
   echo '{}' > "$ENV_FILE"
 else
   KEY_LEN=${#GEMINI_API_KEY}

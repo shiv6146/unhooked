@@ -66,7 +66,7 @@ async function tryLoadEnvApiKey() {
     const settings = await getSettings();
     if (settings.googleApiKey) return; // already configured
 
-    const resp = await fetch(chrome.runtime.getURL("_env.json"));
+    const resp = await fetch(chrome.runtime.getURL("env.json"));
     if (!resp.ok) return;
     const env = await resp.json();
     if (env.GEMINI_API_KEY) {
