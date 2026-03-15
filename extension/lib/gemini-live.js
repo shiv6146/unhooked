@@ -159,13 +159,28 @@ export function clearObservationLog() {
   observationLog = [];
 }
 
+let messageCount = 0;
+
 function handleMessage(message) {
+  messageCount++;
+
+  if (messageCount <= 5) {
+    console.log("[GeminiLive] Message #" + messageCount + " keys:", Object.keys(message).join(", "));
+    if (message.serverContent) {
+      const sc = message.serverContent;
+      console.log("[GeminiLive]   serverContent keys:", Object.keys(sc).join(", "));
+      if (sc.modelTurn?.parts) {
+        console.log("[GeminiLive]   parts count:", sc.modelTurn.parts.length,
+          "types:", sc.modelTurn.parts.map(p => p.text ? "text" : p.inlineData ? "audio" : "other").join(","));
+      }
+    }
+  }
+
   if (message.serverContent?.modelTurn?.parts) {
     for (const part of message.serverContent.modelTurn.parts) {
       if (part.text) {
         responseBuffer += part.text;
       }
-      // Audio parts are ignored (we only care about text for scroll commands)
     }
   }
 
@@ -188,7 +203,7 @@ function handleMessage(message) {
         }
       }
     } else {
-      console.log("[GeminiLive] Turn complete but no text (audio-only response)");
+      console.log("[GeminiLive] Turn complete, no text (audio-only turn)");
     }
     responseBuffer = "";
   }

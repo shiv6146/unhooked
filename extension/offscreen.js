@@ -14,13 +14,16 @@ const FRAME_WIDTH = 512;
 const FRAME_HEIGHT = 512;
 const JPEG_QUALITY = 0.5;
 const FRAME_INTERVAL_MS = 1000;
-const CHANGE_THRESHOLD = 0.05; // 5% pixel change required to send frame
+const CHANGE_THRESHOLD = 0.02; // 2% pixel change required
+const MAX_SKIP_COUNT = 3; // Send at least every 3 seconds even if no change
 
 canvas.width = FRAME_WIDTH;
 canvas.height = FRAME_HEIGHT;
 
 let frameIntervalId = null;
 let previousFrameData = null;
+let skipCount = 0;
+let totalFramesSent = 0;
 
 function logToBackground(message, data) {
   chrome.runtime.sendMessage({
@@ -46,19 +49,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 function hasSignificantChange(currentData) {
   if (!previousFrameData) return true;
 
+  // Always send periodically even without changes
+  skipCount++;
+  if (skipCount >= MAX_SKIP_COUNT) {
+    skipCount = 0;
+    return true;
+  }
+
   const len = currentData.length;
-  const sampleStep = 16; // sample every 16th pixel channel for speed
+  const sampleStep = 16;
   let diffCount = 0;
   let sampleCount = 0;
 
   for (let i = 0; i < len; i += sampleStep) {
     sampleCount++;
-    if (Math.abs(currentData[i] - previousFrameData[i]) > 20) {
+    if (Math.abs(currentData[i] - previousFrameData[i]) > 15) {
       diffCount++;
     }
   }
 
-  return sampleCount > 0 && diffCount / sampleCount > CHANGE_THRESHOLD;
+  const changed = sampleCount > 0 && diffCount / sampleCount > CHANGE_THRESHOLD;
+  if (changed) skipCount = 0;
+  return changed;
 }
 
 async function startExtraction(streamId) {
@@ -111,6 +123,11 @@ async function startExtraction(streamId) {
 
         const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
         const base64 = dataUrl.split(",")[1];
+
+        totalFramesSent++;
+        if (totalFramesSent <= 3 || totalFramesSent % 10 === 0) {
+          logToBackground(`Sending frame #${totalFramesSent} (${Math.round(base64.length / 1024)}KB)`);
+        }
 
         chrome.runtime.sendMessage({
           type: "VIDEO_FRAME",
