@@ -39,8 +39,15 @@ export async function connect(apiKey, systemInstruction, onScrollCommand, onStat
   reconnectConfig = { apiKey, systemInstruction, onScrollCommand, onStatusChange };
 
   const config = {
-    responseModalities: [Modality.TEXT],
+    responseModalities: [Modality.AUDIO],
     mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: {
+          voiceName: "Zephyr",
+        },
+      },
+    },
     contextWindowCompression: {
       triggerTokens: "104857",
       slidingWindow: { targetTokens: "52428" },
@@ -158,14 +165,16 @@ function handleMessage(message) {
       if (part.text) {
         responseBuffer += part.text;
       }
+      // Audio parts are ignored (we only care about text for scroll commands)
     }
   }
 
   if (message.serverContent?.turnComplete) {
     if (responseBuffer.trim()) {
-      console.log("[GeminiLive] Turn complete, raw:", responseBuffer.slice(0, 300));
+      console.log("[GeminiLive] Turn complete, raw text:", responseBuffer.slice(0, 300));
       const command = parseScrollCommand(responseBuffer);
       if (command) {
+        console.log("[GeminiLive] Parsed command:", command.scroll, "| relevance:", command.relevance);
         const entry = {
           timestamp: Date.now(),
           scroll: command.scroll,
@@ -178,6 +187,8 @@ function handleMessage(message) {
           scrollCommandCallback(command);
         }
       }
+    } else {
+      console.log("[GeminiLive] Turn complete but no text (audio-only response)");
     }
     responseBuffer = "";
   }
