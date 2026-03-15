@@ -46,7 +46,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["_env.json"],
+      "resources": ["env.json"],
       "matches": ["<all_urls>"]
     }
   ],
