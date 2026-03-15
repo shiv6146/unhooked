@@ -317,6 +317,17 @@ function extractVisiblePostUrls() {
         });
         break;
       }
+      case "tiktok": {
+        const videos = document.querySelectorAll('[data-e2e="recommend-list-item-container"], [class*="DivItemContainer"]');
+        videos.forEach((vid) => {
+          const rect = vid.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            const link = vid.querySelector('a[href*="/video/"]') || vid.querySelector('a[href*="/@"]');
+            if (link) urls.push(link.href);
+          }
+        });
+        break;
+      }
       case "hackernews": {
         const rows = document.querySelectorAll(".athing");
         rows.forEach((row) => {
@@ -359,6 +370,7 @@ function detectSite() {
   if (hostname.includes("reddit.com")) return { name: "reddit" };
   if (hostname.includes("linkedin.com")) return { name: "linkedin" };
   if (hostname.includes("facebook.com")) return { name: "facebook" };
+  if (hostname.includes("tiktok.com")) return { name: "tiktok" };
   if (hostname.includes("news.ycombinator.com")) return { name: "hackernews" };
   if (hostname.includes("bbc.com") || hostname.includes("bbc.co.uk")) return { name: "news" };
   if (hostname.includes("cnn.com")) return { name: "news" };

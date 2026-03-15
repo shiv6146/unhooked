@@ -529,11 +529,57 @@ async function loadDigestsHistory() {
       </div>
     `;
     item.addEventListener("click", () => {
-      switchTab("agent");
-      showDigestView(s);
+      showDigestInline(s, item);
     });
     list.appendChild(item);
   });
+}
+
+function showDigestInline(session, itemEl) {
+  // Collapse any previously expanded digest
+  document.querySelectorAll(".digest-expanded").forEach((el) => el.remove());
+
+  const d = session.digest || {};
+  const dur = formatDuration(session.duration || 0);
+  const tokens = session.tokenUsage || {};
+  const totalTokens = (tokens.totalInputTokens || 0) + (tokens.totalOutputTokens || 0);
+  const estCost = (totalTokens / 1000000 * 0.15).toFixed(4);
+  const timeSavedMin = Math.round((session.timeSaved || 0) / 60);
+  const noiseRate = Math.round((1 - (d.matchRate || 0)) * 100);
+
+  const detail = document.createElement("div");
+  detail.className = "digest-expanded";
+  detail.style.cssText = "padding:10px;margin-top:6px;background:rgba(17,24,39,0.8);border-radius:10px;border:1px solid rgba(59,130,246,0.2);";
+
+  let html = `<div class="tldr-card" style="margin-bottom:8px;">${esc(d.tldr || "Session complete.")}</div>`;
+
+  if (d.mustRead?.length) {
+    html += `<div class="section-title" style="font-size:11px;">MUST-READ (${d.mustRead.length})</div>`;
+    d.mustRead.forEach((item) => {
+      html += `<div class="must-read-card" style="padding:8px;margin-bottom:6px;">
+        <div class="mr-title" style="font-size:12px;">${esc(item.title)}</div>
+        <div class="mr-source">${esc(item.source || "")}</div>
+        <div class="mr-note">${esc(item.agentNote || "")}</div>
+        ${item.postUrl ? `<a class="mr-link" href="${esc(item.postUrl)}" target="_blank">Open Post</a>` : ""}
+      </div>`;
+    });
+  }
+
+  if (d.worthALook?.length) {
+    html += `<div class="section-title" style="font-size:11px;">WORTH A LOOK (${d.worthALook.length})</div>`;
+    d.worthALook.forEach((item) => {
+      html += `<div class="wal-item"><span class="wal-title">${esc(item.title)}</span> — ${esc(item.oneLiner || "")}</div>`;
+    });
+  }
+
+  html += `<div style="font-size:11px;color:#64748b;margin-top:8px;">
+    Saved ~${timeSavedMin} min · ${dur} · ${session.postsScanned || 0} posts
+    ${totalTokens > 0 ? ` · ${totalTokens.toLocaleString()} tokens (~$${estCost})` : ""}
+    ${noiseRate > 0 ? ` · ${noiseRate}% noise` : ""}
+  </div>`;
+
+  detail.innerHTML = html;
+  itemEl.after(detail);
 }
 
 // ============================================================================
