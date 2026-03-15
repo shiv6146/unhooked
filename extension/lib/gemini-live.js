@@ -81,6 +81,7 @@ export async function connect(apiKey, systemInstruction, onScrollCommand, onStat
           console.log("[GeminiLive] Closed:", e?.reason || e?.code || "unknown");
           const wasConnected = session !== null;
           session = null;
+          if (promptIntervalId) { clearInterval(promptIntervalId); promptIntervalId = null; }
           statusChangeCallback("disconnected");
 
           if (wasConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS && reconnectConfig) {
@@ -92,11 +93,52 @@ export async function connect(apiKey, systemInstruction, onScrollCommand, onStat
     });
 
     console.log("[GeminiLive] Session established via Live API");
+
+    // The native-audio model needs prompting to respond to video-only input.
+    // Send periodic text prompts asking it to describe what it sees.
+    startPromptLoop();
   } catch (err) {
     console.error("[GeminiLive] Connection failed:", err?.message || err);
     session = null;
     statusChangeCallback("error");
     throw err;
+  }
+}
+
+let promptIntervalId = null;
+let promptCount = 0;
+
+function startPromptLoop() {
+  if (promptIntervalId) clearInterval(promptIntervalId);
+  promptCount = 0;
+
+  // Send an initial prompt after a short delay for frames to arrive
+  setTimeout(() => sendPrompt(), 3000);
+
+  // Then prompt every 5 seconds to keep the model talking
+  promptIntervalId = setInterval(() => sendPrompt(), 5000);
+}
+
+function sendPrompt() {
+  if (!session) return;
+  promptCount++;
+
+  const prompts = [
+    "What do you see on the screen right now? Describe the content and tell me if I should pause, slow down, or keep scrolling.",
+    "Look at the current content on screen. Is there anything relevant to my interests? Should I pause here or scroll past?",
+    "Describe what's visible now. Is this worth reading or should I skip it?",
+    "What's on the feed right now? Tell me your scroll decision — pause, slow, or keep going.",
+    "Analyze the current screen. Any content matching my curator goal?",
+  ];
+  const prompt = prompts[promptCount % prompts.length];
+
+  try {
+    session.sendClientContent({ turns: [prompt] });
+    if (promptCount <= 3) {
+      console.log("[GeminiLive] Sent prompt #" + promptCount);
+    }
+  } catch (err) {
+    console.error("[GeminiLive] sendClientContent error:", err?.message);
   }
 }
 
@@ -129,6 +171,7 @@ export function sendFrame(base64jpeg) {
 
 export function disconnect() {
   reconnectConfig = null;
+  if (promptIntervalId) { clearInterval(promptIntervalId); promptIntervalId = null; }
   if (session) {
     try { session.close(); } catch (_) {}
     session = null;
@@ -148,30 +191,42 @@ export function clearObservationLog() { observationLog = []; }
 // Message handling — we read outputTranscription for text
 // ---------------------------------------------------------------------------
 
+let msgCount = 0;
+
 function handleMessage(message) {
+  msgCount++;
+  const sc = message.serverContent;
+
+  // Debug first 10 messages to understand response structure
+  if (msgCount <= 10) {
+    const keys = sc ? Object.keys(sc).join(",") : "no-serverContent";
+    console.log(`[GeminiLive] Msg #${msgCount} serverContent keys: ${keys}`);
+  }
+
   // outputAudioTranscription delivers text transcripts of what the model says
-  const transcript = message.serverContent?.outputTranscription?.text;
+  const transcript = sc?.outputTranscription?.text;
   if (transcript) {
     transcriptBuffer += transcript;
+    if (msgCount <= 10) console.log("[GeminiLive] Transcript chunk:", transcript.slice(0, 100));
 
-    // Process on sentence boundaries or after accumulating enough text
-    if (transcriptBuffer.includes("}") || transcriptBuffer.length > 200) {
+    if (transcriptBuffer.includes(".") || transcriptBuffer.includes("!") || transcriptBuffer.includes("?") || transcriptBuffer.length > 150) {
       processTranscript(transcriptBuffer.trim());
       transcriptBuffer = "";
     }
     return;
   }
 
-  // Also try modelTurn text parts (some responses may include direct text)
-  if (message.serverContent?.modelTurn?.parts) {
-    for (const part of message.serverContent.modelTurn.parts) {
+  // modelTurn text parts
+  if (sc?.modelTurn?.parts) {
+    for (const part of sc.modelTurn.parts) {
       if (part.text) {
         transcriptBuffer += part.text;
+        if (msgCount <= 10) console.log("[GeminiLive] Text part:", part.text.slice(0, 100));
       }
     }
   }
 
-  if (message.serverContent?.turnComplete) {
+  if (sc?.turnComplete) {
     if (transcriptBuffer.trim()) {
       processTranscript(transcriptBuffer.trim());
     }
