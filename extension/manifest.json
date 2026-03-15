@@ -18,13 +18,8 @@
     "offscreen"
   ],
   "host_permissions": [
-    "https://*.twitter.com/*",
-    "https://*.x.com/*",
-    "https://*.reddit.com/*",
-    "https://*.instagram.com/*",
-    "https://*.linkedin.com/*",
-    "https://*.facebook.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -43,15 +38,16 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.twitter.com/*",
-        "https://*.x.com/*",
-        "https://*.reddit.com/*",
-        "https://*.instagram.com/*",
-        "https://*.linkedin.com/*",
-        "https://*.facebook.com/*"
+        "<all_urls>"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["_env.json"],
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {

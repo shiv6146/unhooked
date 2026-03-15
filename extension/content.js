@@ -313,12 +313,24 @@ function extractVisiblePostUrls() {
         });
         break;
       }
+      case "hackernews": {
+        const rows = document.querySelectorAll(".athing");
+        rows.forEach((row) => {
+          const rect = row.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            const link = row.querySelector(".titleline a");
+            if (link) urls.push(link.href);
+          }
+        });
+        break;
+      }
+      case "news":
       default: {
-        const articles = document.querySelectorAll('article, [role="article"], .post');
+        const articles = document.querySelectorAll('article, [role="article"], .post, .story-card, .card, h2 a, h3 a');
         articles.forEach((el) => {
           const rect = el.getBoundingClientRect();
           if (rect.top < window.innerHeight && rect.bottom > 0) {
-            const link = el.querySelector("a[href]");
+            const link = el.tagName === "A" ? el : el.querySelector("a[href]");
             if (link && link.href.length > 30) urls.push(link.href);
           }
         });
@@ -343,6 +355,13 @@ function detectSite() {
   if (hostname.includes("reddit.com")) return { name: "reddit" };
   if (hostname.includes("linkedin.com")) return { name: "linkedin" };
   if (hostname.includes("facebook.com")) return { name: "facebook" };
+  if (hostname.includes("news.ycombinator.com")) return { name: "hackernews" };
+  if (hostname.includes("bbc.com") || hostname.includes("bbc.co.uk")) return { name: "news" };
+  if (hostname.includes("cnn.com")) return { name: "news" };
+  if (hostname.includes("reuters.com")) return { name: "news" };
+  if (hostname.includes("techcrunch.com")) return { name: "news" };
+  if (hostname.includes("theverge.com")) return { name: "news" };
+  if (hostname.includes("arstechnica.com")) return { name: "news" };
   return { name: "generic" };
 }
 
