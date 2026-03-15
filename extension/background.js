@@ -312,13 +312,13 @@ async function startVideoStreaming(tabId, apiKey, streamId, curatorGoal, session
   const systemPrompt = buildSessionPrompt(curatorGoal, sessionInstructions);
   log("System prompt length:", systemPrompt.length);
 
-  log("Connecting to Gemini frame analyzer...");
+  log("Connecting to Gemini Live API...");
   await GeminiLive.connect(apiKey, systemPrompt, (command) => {
     handleScrollCommand(tabId, command);
   }, (status) => {
-    log("Gemini Live status change:", status);
+    log("Gemini Live status:", status);
   });
-  log("Gemini frame analyzer connected successfully");
+  log("Gemini Live API connected");
 
   volatile.geminiConnected = true;
   volatile.frameCount = 0;
