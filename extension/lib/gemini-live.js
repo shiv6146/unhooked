@@ -4,12 +4,6 @@
  * Uses gemini-2.5-flash-native-audio via bidiGenerateContent (Live API)
  * with outputAudioTranscription to get text transcripts of the model's
  * spoken observations. Audio output is discarded; we only use the text.
- *
- * This approach uses the real-time WebSocket Live API which:
- * - Maintains stateful context across the entire session
- * - Processes continuous video frames with memory of what it's seen
- * - Handles reels/shorts/video content (not just static screenshots)
- * - Qualifies for the Gemini Live Agent Challenge hackathon
  */
 
 import { GoogleGenAI, Modality } from "./genai.bundle.js";
@@ -17,6 +11,7 @@ import { GoogleGenAI, Modality } from "./genai.bundle.js";
 const MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_DELAY_MS = 2000;
+const PROMPT_INTERVAL_MS = 5000;
 
 let session = null;
 let ai = null;
@@ -26,18 +21,25 @@ let observationLog = [];
 let reconnectAttempts = 0;
 let reconnectConfig = null;
 let transcriptBuffer = "";
+let promptIntervalId = null;
+let promptCount = 0;
+let tokenUsage = { totalInputTokens: 0, totalOutputTokens: 0 };
 
-/**
- * Connect to Gemini Live API with audio transcription enabled.
- */
+function safeStatusChange(status) {
+  try {
+    if (typeof statusChangeCallback === "function") statusChangeCallback(status);
+  } catch (_) {}
+}
+
 export async function connect(apiKey, systemInstruction, onScrollCommand, onStatusChange) {
   ai = new GoogleGenAI({ apiKey });
-
   scrollCommandCallback = onScrollCommand;
   statusChangeCallback = onStatusChange || (() => {});
   observationLog = [];
   reconnectAttempts = 0;
   transcriptBuffer = "";
+  promptCount = 0;
+  tokenUsage = { totalInputTokens: 0, totalOutputTokens: 0 };
 
   reconnectConfig = { apiKey, systemInstruction, onScrollCommand, onStatusChange };
 
@@ -68,21 +70,21 @@ export async function connect(apiKey, systemInstruction, onScrollCommand, onStat
         onopen: () => {
           console.log("[GeminiLive] WebSocket opened");
           reconnectAttempts = 0;
-          statusChangeCallback("connected");
+          safeStatusChange("connected");
         },
         onmessage: (message) => {
           handleMessage(message);
         },
         onerror: (e) => {
           console.error("[GeminiLive] Error:", e?.message || e);
-          statusChangeCallback("error");
+          safeStatusChange("error");
         },
         onclose: (e) => {
           console.log("[GeminiLive] Closed:", e?.reason || e?.code || "unknown");
           const wasConnected = session !== null;
           session = null;
           if (promptIntervalId) { clearInterval(promptIntervalId); promptIntervalId = null; }
-          statusChangeCallback("disconnected");
+          safeStatusChange("disconnected");
 
           if (wasConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS && reconnectConfig) {
             attemptReconnect();
@@ -93,36 +95,25 @@ export async function connect(apiKey, systemInstruction, onScrollCommand, onStat
     });
 
     console.log("[GeminiLive] Session established via Live API");
-
-    // The native-audio model needs prompting to respond to video-only input.
-    // Send periodic text prompts asking it to describe what it sees.
     startPromptLoop();
   } catch (err) {
     console.error("[GeminiLive] Connection failed:", err?.message || err);
     session = null;
-    statusChangeCallback("error");
+    safeStatusChange("error");
     throw err;
   }
 }
 
-let promptIntervalId = null;
-let promptCount = 0;
-
 function startPromptLoop() {
   if (promptIntervalId) clearInterval(promptIntervalId);
   promptCount = 0;
-
-  // Send an initial prompt after a short delay for frames to arrive
   setTimeout(() => sendPrompt(), 3000);
-
-  // Then prompt every 5 seconds to keep the model talking
-  promptIntervalId = setInterval(() => sendPrompt(), 5000);
+  promptIntervalId = setInterval(() => sendPrompt(), PROMPT_INTERVAL_MS);
 }
 
 function sendPrompt() {
   if (!session) return;
   promptCount++;
-
   const prompts = [
     "What do you see on the screen right now? Describe the content and tell me if I should pause, slow down, or keep scrolling.",
     "Look at the current content on screen. Is there anything relevant to my interests? Should I pause here or scroll past?",
@@ -130,13 +121,8 @@ function sendPrompt() {
     "What's on the feed right now? Tell me your scroll decision — pause, slow, or keep going.",
     "Analyze the current screen. Any content matching my curator goal?",
   ];
-  const prompt = prompts[promptCount % prompts.length];
-
   try {
-    session.sendClientContent({ turns: [prompt] });
-    if (promptCount <= 3) {
-      console.log("[GeminiLive] Sent prompt #" + promptCount);
-    }
+    session.sendClientContent({ turns: [prompts[promptCount % prompts.length]] });
   } catch (err) {
     console.error("[GeminiLive] sendClientContent error:", err?.message);
   }
@@ -147,23 +133,22 @@ async function attemptReconnect() {
   reconnectAttempts++;
   const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1);
   console.log(`[GeminiLive] Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms`);
-  statusChangeCallback("reconnecting");
+  safeStatusChange("reconnecting");
   await new Promise((r) => setTimeout(r, delay));
   try {
-    const { apiKey, systemInstruction, onScrollCommand, onStatusChange } = reconnectConfig;
-    await connect(apiKey, systemInstruction, onScrollCommand, onStatusChange);
+    const cfg = reconnectConfig;
+    if (!cfg) return;
+    await connect(cfg.apiKey, cfg.systemInstruction, cfg.onScrollCommand, cfg.onStatusChange);
   } catch (err) {
     console.error("[GeminiLive] Reconnect failed:", err?.message);
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) statusChangeCallback("error");
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) safeStatusChange("error");
   }
 }
 
 export function sendFrame(base64jpeg) {
   if (!session) return;
   try {
-    session.sendRealtimeInput({
-      media: { data: base64jpeg, mimeType: "image/jpeg" },
-    });
+    session.sendRealtimeInput({ media: { data: base64jpeg, mimeType: "image/jpeg" } });
   } catch (err) {
     console.error("[GeminiLive] sendFrame error:", err?.message);
   }
@@ -186,114 +171,98 @@ export function disconnect() {
 export function isConnected() { return session !== null; }
 export function getObservationLog() { return [...observationLog]; }
 export function clearObservationLog() { observationLog = []; }
+export function getTokenUsage() { return { ...tokenUsage }; }
 
 // ---------------------------------------------------------------------------
-// Message handling — we read outputTranscription for text
+// Message handling
 // ---------------------------------------------------------------------------
-
-let msgCount = 0;
 
 function handleMessage(message) {
-  msgCount++;
   const sc = message.serverContent;
 
-  // Debug first 10 messages to understand response structure
-  if (msgCount <= 10) {
-    const keys = sc ? Object.keys(sc).join(",") : "no-serverContent";
-    console.log(`[GeminiLive] Msg #${msgCount} serverContent keys: ${keys}`);
+  // Track token usage from usageMetadata
+  if (message.usageMetadata || sc?.usageMetadata) {
+    const um = message.usageMetadata || sc.usageMetadata;
+    if (um.totalTokenCount) {
+      tokenUsage.totalInputTokens = um.promptTokenCount || um.totalTokenCount || 0;
+      tokenUsage.totalOutputTokens = um.candidatesTokenCount || 0;
+    }
   }
 
-  // outputAudioTranscription delivers text transcripts of what the model says
+  // outputAudioTranscription — primary text source
   const transcript = sc?.outputTranscription?.text;
   if (transcript) {
     transcriptBuffer += transcript;
-    if (msgCount <= 10) console.log("[GeminiLive] Transcript chunk:", transcript.slice(0, 100));
-
-    if (transcriptBuffer.includes(".") || transcriptBuffer.includes("!") || transcriptBuffer.includes("?") || transcriptBuffer.length > 150) {
+    if (transcriptBuffer.includes(".") || transcriptBuffer.includes("!") ||
+        transcriptBuffer.includes("?") || transcriptBuffer.length > 150) {
       processTranscript(transcriptBuffer.trim());
       transcriptBuffer = "";
     }
     return;
   }
 
-  // modelTurn text parts
+  // modelTurn text parts (fallback)
   if (sc?.modelTurn?.parts) {
     for (const part of sc.modelTurn.parts) {
-      if (part.text) {
-        transcriptBuffer += part.text;
-        if (msgCount <= 10) console.log("[GeminiLive] Text part:", part.text.slice(0, 100));
-      }
+      if (part.text) transcriptBuffer += part.text;
     }
   }
 
   if (sc?.turnComplete) {
-    if (transcriptBuffer.trim()) {
-      processTranscript(transcriptBuffer.trim());
-    }
+    if (transcriptBuffer.trim()) processTranscript(transcriptBuffer.trim());
     transcriptBuffer = "";
   }
 }
 
 function processTranscript(text) {
   if (!text) return;
-
   const command = parseScrollCommand(text);
-  if (command) {
-    console.log("[GeminiLive] Transcript ->", command.scroll, "|", command.relevance, "|", command.observation.slice(0, 80));
+  if (!command) return;
 
-    observationLog.push({
-      timestamp: Date.now(),
-      scroll: command.scroll,
-      observation: command.observation,
-      relevance: command.relevance,
-    });
+  console.log("[GeminiLive] Transcript ->", command.scroll, "|", command.relevance, "|", command.observation.slice(0, 80));
 
-    if (scrollCommandCallback) {
-      scrollCommandCallback(command);
-    }
+  observationLog.push({
+    timestamp: Date.now(),
+    scroll: command.scroll,
+    observation: command.observation,
+    relevance: command.relevance,
+  });
+
+  if (typeof scrollCommandCallback === "function") {
+    scrollCommandCallback(command);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Transcript parsing — extract scroll commands from spoken observations
-// The model's spoken response may be natural language, not strict JSON.
-// We parse flexibly.
+// Transcript → scroll command parsing (NLP + JSON)
 // ---------------------------------------------------------------------------
 
 function parseScrollCommand(text) {
   const trimmed = text.trim();
+  if (trimmed.length < 3) return null;
 
-  // Try JSON parse first
   try { return normalizeCommand(JSON.parse(trimmed)); } catch (_) {}
 
-  // Extract JSON from markdown or mixed text
   const jsonMatch = trimmed.match(/\{[\s\S]*?"scroll"\s*:[\s\S]*?\}/);
   if (jsonMatch) {
     try { return normalizeCommand(JSON.parse(jsonMatch[0])); } catch (_) {}
   }
 
-  // Natural language parsing — the model speaks its observations
-  const lowerText = trimmed.toLowerCase();
-
-  if (lowerText.includes("pause") || lowerText.includes("stop") || lowerText.includes("wait") || lowerText.includes("interesting") || lowerText.includes("relevant")) {
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("pause") || lower.includes("stop") || lower.includes("interesting") || lower.includes("relevant") || lower.includes("this matches")) {
     return { scroll: "SCROLL_PAUSE", observation: trimmed.slice(0, 300), relevance: "high" };
   }
-  if (lowerText.includes("slow") || lowerText.includes("closer look") || lowerText.includes("worth")) {
+  if (lower.includes("slow down") || lower.includes("closer look") || lower.includes("worth a look") || lower.includes("let me slow")) {
     return { scroll: "SCROLL_SLOW", observation: trimmed.slice(0, 300), relevance: "medium" };
   }
-  if (lowerText.includes("skip") || lowerText.includes("ad") || lowerText.includes("irrelevant") || lowerText.includes("not relevant") || lowerText.includes("promoted")) {
+  if (lower.includes("skip") || lower.includes("irrelevant") || lower.includes("not relevant") || lower.includes("promoted") || lower.includes("advertisement")) {
     return { scroll: "SCROLL_FAST", observation: trimmed.slice(0, 300), relevance: "low" };
   }
-  if (lowerText.includes("go back") || lowerText.includes("scroll up") || lowerText.includes("missed")) {
+  if (lower.includes("go back") || lower.includes("scroll up") || lower.includes("missed")) {
     return { scroll: "SCROLL_UP", observation: trimmed.slice(0, 300), relevance: "medium" };
   }
 
-  // Default: continue scrolling — the model is describing content
-  return {
-    scroll: "SCROLL_DOWN",
-    observation: trimmed.slice(0, 300),
-    relevance: "low",
-  };
+  return { scroll: "SCROLL_DOWN", observation: trimmed.slice(0, 300), relevance: "low" };
 }
 
 function normalizeCommand(obj) {
