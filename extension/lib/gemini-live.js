@@ -1,226 +1,251 @@
 /**
- * Gemini Frame Analyzer
+ * Gemini Live API Client — Real-time Video Analysis
  *
- * Sends captured video frames to gemini-2.5-flash via generateContent
- * for real-time analysis. Returns structured JSON scroll commands.
+ * Uses gemini-2.5-flash-native-audio via bidiGenerateContent (Live API)
+ * with outputAudioTranscription to get text transcripts of the model's
+ * spoken observations. Audio output is discarded; we only use the text.
  *
- * Replaces the Live API (bidiGenerateContent) approach because the
- * native-audio Live API models force audio output. generateContent
- * with gemini-2.5-flash gives us text-only JSON responses from video frames.
+ * This approach uses the real-time WebSocket Live API which:
+ * - Maintains stateful context across the entire session
+ * - Processes continuous video frames with memory of what it's seen
+ * - Handles reels/shorts/video content (not just static screenshots)
+ * - Qualifies for the Gemini Live Agent Challenge hackathon
  */
 
-import { GoogleGenAI } from "./genai.bundle.js";
+import { GoogleGenAI, Modality } from "./genai.bundle.js";
 
-const MODEL = "gemini-2.5-flash";
-const ANALYSIS_INTERVAL_MS = 3000; // Analyze every 3 seconds
-const MAX_RETRIES = 2;
+const MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_BASE_DELAY_MS = 2000;
 
+let session = null;
 let ai = null;
-let systemInstruction = "";
 let scrollCommandCallback = null;
 let statusChangeCallback = null;
 let observationLog = [];
-let analysisIntervalId = null;
-let pendingFrame = null; // Latest frame waiting to be analyzed
-let analyzing = false;
-let connected = false;
-let frameCount = 0;
+let reconnectAttempts = 0;
+let reconnectConfig = null;
+let transcriptBuffer = "";
 
 /**
- * Initialize the analyzer.
- * @param {string} apiKey
- * @param {string} sysInstruction - System prompt from prompts.js
- * @param {function} onScrollCommand - callback({ scroll, observation, relevance })
- * @param {function} [onStatusChange] - callback(status)
+ * Connect to Gemini Live API with audio transcription enabled.
  */
-export async function connect(apiKey, sysInstruction, onScrollCommand, onStatusChange) {
+export async function connect(apiKey, systemInstruction, onScrollCommand, onStatusChange) {
   ai = new GoogleGenAI({ apiKey });
-  systemInstruction = sysInstruction;
+
   scrollCommandCallback = onScrollCommand;
   statusChangeCallback = onStatusChange || (() => {});
   observationLog = [];
-  frameCount = 0;
-  analyzing = false;
-  pendingFrame = null;
+  reconnectAttempts = 0;
+  transcriptBuffer = "";
 
-  // Validate connection with a quick test
+  reconnectConfig = { apiKey, systemInstruction, onScrollCommand, onStatusChange };
+
+  const config = {
+    responseModalities: [Modality.AUDIO],
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: { voiceName: "Zephyr" },
+      },
+    },
+    outputAudioTranscription: {},
+    mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
+    contextWindowCompression: {
+      triggerTokens: "104857",
+      slidingWindow: { targetTokens: "52428" },
+    },
+    systemInstruction: {
+      parts: [{ text: systemInstruction }],
+    },
+  };
+
+  console.log("[GeminiLive] Connecting to", MODEL);
+
   try {
-    console.log("[GeminiAnalyzer] Validating API key with gemini-2.5-flash...");
-    const testResult = await ai.models.generateContent({
+    session = await ai.live.connect({
       model: MODEL,
-      contents: "Respond with just: ok",
+      callbacks: {
+        onopen: () => {
+          console.log("[GeminiLive] WebSocket opened");
+          reconnectAttempts = 0;
+          statusChangeCallback("connected");
+        },
+        onmessage: (message) => {
+          handleMessage(message);
+        },
+        onerror: (e) => {
+          console.error("[GeminiLive] Error:", e?.message || e);
+          statusChangeCallback("error");
+        },
+        onclose: (e) => {
+          console.log("[GeminiLive] Closed:", e?.reason || e?.code || "unknown");
+          const wasConnected = session !== null;
+          session = null;
+          statusChangeCallback("disconnected");
+
+          if (wasConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS && reconnectConfig) {
+            attemptReconnect();
+          }
+        },
+      },
+      config,
     });
-    if (!testResult.text) throw new Error("Empty response from validation call");
-    console.log("[GeminiAnalyzer] API key validated successfully");
+
+    console.log("[GeminiLive] Session established via Live API");
   } catch (err) {
-    console.error("[GeminiAnalyzer] API key validation failed:", err?.message);
+    console.error("[GeminiLive] Connection failed:", err?.message || err);
+    session = null;
     statusChangeCallback("error");
     throw err;
   }
-
-  connected = true;
-  statusChangeCallback("connected");
-
-  // Start the analysis loop
-  analysisIntervalId = setInterval(analyzeNextFrame, ANALYSIS_INTERVAL_MS);
-  console.log("[GeminiAnalyzer] Analysis loop started (every " + ANALYSIS_INTERVAL_MS + "ms)");
 }
 
-/**
- * Buffer a frame for analysis. Only the latest frame is kept.
- */
-export function sendFrame(base64jpeg) {
-  if (!connected) return;
-  pendingFrame = base64jpeg;
-  frameCount++;
-}
-
-/**
- * Analyze the latest buffered frame via generateContent.
- */
-async function analyzeNextFrame() {
-  if (!connected || !ai || analyzing || !pendingFrame) return;
-
-  const frame = pendingFrame;
-  pendingFrame = null;
-  analyzing = true;
-
+async function attemptReconnect() {
+  if (!reconnectConfig) return;
+  reconnectAttempts++;
+  const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1);
+  console.log(`[GeminiLive] Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms`);
+  statusChangeCallback("reconnecting");
+  await new Promise((r) => setTimeout(r, delay));
   try {
-    const result = await ai.models.generateContent({
-      model: MODEL,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: frame,
-              },
-            },
-            {
-              text: "Analyze this social media feed screenshot. Respond with a single JSON object: {\"scroll\": \"SCROLL_DOWN|SCROLL_SLOW|SCROLL_PAUSE|SCROLL_FAST|SCROLL_UP\", \"observation\": \"what you see\", \"relevance\": \"high|medium|low\"}",
-            },
-          ],
-        },
-      ],
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.3,
-        maxOutputTokens: 300,
-      },
-    });
-
-    const text = result.text || "";
-    if (text.trim()) {
-      const command = parseScrollCommand(text);
-      if (command) {
-        console.log("[GeminiAnalyzer] Frame analyzed:", command.scroll, "| relevance:", command.relevance, "| obs:", command.observation.slice(0, 80));
-
-        const entry = {
-          timestamp: Date.now(),
-          scroll: command.scroll,
-          observation: command.observation,
-          relevance: command.relevance,
-        };
-        observationLog.push(entry);
-
-        if (scrollCommandCallback) {
-          scrollCommandCallback(command);
-        }
-      }
-    }
+    const { apiKey, systemInstruction, onScrollCommand, onStatusChange } = reconnectConfig;
+    await connect(apiKey, systemInstruction, onScrollCommand, onStatusChange);
   } catch (err) {
-    console.error("[GeminiAnalyzer] Frame analysis failed:", err?.message?.slice(0, 200));
-    // Don't disconnect on individual frame failures
-  } finally {
-    analyzing = false;
+    console.error("[GeminiLive] Reconnect failed:", err?.message);
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) statusChangeCallback("error");
+  }
+}
+
+export function sendFrame(base64jpeg) {
+  if (!session) return;
+  try {
+    session.sendRealtimeInput({
+      media: { data: base64jpeg, mimeType: "image/jpeg" },
+    });
+  } catch (err) {
+    console.error("[GeminiLive] sendFrame error:", err?.message);
   }
 }
 
 export function disconnect() {
-  connected = false;
-  if (analysisIntervalId) {
-    clearInterval(analysisIntervalId);
-    analysisIntervalId = null;
+  reconnectConfig = null;
+  if (session) {
+    try { session.close(); } catch (_) {}
+    session = null;
   }
   ai = null;
   scrollCommandCallback = null;
   statusChangeCallback = null;
-  pendingFrame = null;
-  analyzing = false;
-  console.log("[GeminiAnalyzer] Disconnected. Frames received:", frameCount, "| Observations:", observationLog.length);
+  transcriptBuffer = "";
+  console.log("[GeminiLive] Disconnected. Observations:", observationLog.length);
 }
 
-export function isConnected() {
-  return connected;
+export function isConnected() { return session !== null; }
+export function getObservationLog() { return [...observationLog]; }
+export function clearObservationLog() { observationLog = []; }
+
+// ---------------------------------------------------------------------------
+// Message handling — we read outputTranscription for text
+// ---------------------------------------------------------------------------
+
+function handleMessage(message) {
+  // outputAudioTranscription delivers text transcripts of what the model says
+  const transcript = message.serverContent?.outputTranscription?.text;
+  if (transcript) {
+    transcriptBuffer += transcript;
+
+    // Process on sentence boundaries or after accumulating enough text
+    if (transcriptBuffer.includes("}") || transcriptBuffer.length > 200) {
+      processTranscript(transcriptBuffer.trim());
+      transcriptBuffer = "";
+    }
+    return;
+  }
+
+  // Also try modelTurn text parts (some responses may include direct text)
+  if (message.serverContent?.modelTurn?.parts) {
+    for (const part of message.serverContent.modelTurn.parts) {
+      if (part.text) {
+        transcriptBuffer += part.text;
+      }
+    }
+  }
+
+  if (message.serverContent?.turnComplete) {
+    if (transcriptBuffer.trim()) {
+      processTranscript(transcriptBuffer.trim());
+    }
+    transcriptBuffer = "";
+  }
 }
 
-export function getObservationLog() {
-  return [...observationLog];
-}
+function processTranscript(text) {
+  if (!text) return;
 
-export function clearObservationLog() {
-  observationLog = [];
+  const command = parseScrollCommand(text);
+  if (command) {
+    console.log("[GeminiLive] Transcript ->", command.scroll, "|", command.relevance, "|", command.observation.slice(0, 80));
+
+    observationLog.push({
+      timestamp: Date.now(),
+      scroll: command.scroll,
+      observation: command.observation,
+      relevance: command.relevance,
+    });
+
+    if (scrollCommandCallback) {
+      scrollCommandCallback(command);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Response parsing
+// Transcript parsing — extract scroll commands from spoken observations
+// The model's spoken response may be natural language, not strict JSON.
+// We parse flexibly.
 // ---------------------------------------------------------------------------
 
 function parseScrollCommand(text) {
   const trimmed = text.trim();
 
-  // Direct JSON parse
-  try {
-    return normalizeCommand(JSON.parse(trimmed));
-  } catch (_) {}
+  // Try JSON parse first
+  try { return normalizeCommand(JSON.parse(trimmed)); } catch (_) {}
 
-  // Extract from markdown fences
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) {
-    try {
-      return normalizeCommand(JSON.parse(fenced[1].trim()));
-    } catch (_) {}
-  }
-
-  // Find JSON object in surrounding text
+  // Extract JSON from markdown or mixed text
   const jsonMatch = trimmed.match(/\{[\s\S]*?"scroll"\s*:[\s\S]*?\}/);
   if (jsonMatch) {
-    try {
-      return normalizeCommand(JSON.parse(jsonMatch[0]));
-    } catch (_) {}
+    try { return normalizeCommand(JSON.parse(jsonMatch[0])); } catch (_) {}
   }
 
-  // Keyword fallback
-  const scrollKeywords = ["SCROLL_PAUSE", "SCROLL_SLOW", "SCROLL_FAST", "SCROLL_UP", "SCROLL_DOWN"];
-  for (const kw of scrollKeywords) {
-    if (trimmed.includes(kw)) {
-      return {
-        scroll: kw,
-        observation: trimmed.replace(/[{}"\n]/g, "").trim().slice(0, 200),
-        relevance: kw === "SCROLL_PAUSE" ? "high" : kw === "SCROLL_SLOW" ? "medium" : "low",
-      };
-    }
+  // Natural language parsing — the model speaks its observations
+  const lowerText = trimmed.toLowerCase();
+
+  if (lowerText.includes("pause") || lowerText.includes("stop") || lowerText.includes("wait") || lowerText.includes("interesting") || lowerText.includes("relevant")) {
+    return { scroll: "SCROLL_PAUSE", observation: trimmed.slice(0, 300), relevance: "high" };
+  }
+  if (lowerText.includes("slow") || lowerText.includes("closer look") || lowerText.includes("worth")) {
+    return { scroll: "SCROLL_SLOW", observation: trimmed.slice(0, 300), relevance: "medium" };
+  }
+  if (lowerText.includes("skip") || lowerText.includes("ad") || lowerText.includes("irrelevant") || lowerText.includes("not relevant") || lowerText.includes("promoted")) {
+    return { scroll: "SCROLL_FAST", observation: trimmed.slice(0, 300), relevance: "low" };
+  }
+  if (lowerText.includes("go back") || lowerText.includes("scroll up") || lowerText.includes("missed")) {
+    return { scroll: "SCROLL_UP", observation: trimmed.slice(0, 300), relevance: "medium" };
   }
 
-  // Default
-  console.warn("[GeminiAnalyzer] Unparseable response:", trimmed.slice(0, 150));
+  // Default: continue scrolling — the model is describing content
   return {
     scroll: "SCROLL_DOWN",
-    observation: trimmed.slice(0, 200),
+    observation: trimmed.slice(0, 300),
     relevance: "low",
   };
 }
 
 function normalizeCommand(obj) {
   const validScrolls = ["SCROLL_DOWN", "SCROLL_SLOW", "SCROLL_PAUSE", "SCROLL_FAST", "SCROLL_UP"];
-  const scroll = validScrolls.includes(obj.scroll) ? obj.scroll : "SCROLL_DOWN";
-  const relevance = ["high", "medium", "low"].includes(obj.relevance) ? obj.relevance : "low";
-
   return {
-    scroll,
+    scroll: validScrolls.includes(obj.scroll) ? obj.scroll : "SCROLL_DOWN",
     observation: obj.observation || obj.reason || "",
-    relevance,
+    relevance: ["high", "medium", "low"].includes(obj.relevance) ? obj.relevance : "low",
   };
 }
