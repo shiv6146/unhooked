@@ -51,9 +51,36 @@ async function initialize() {
     if (!sessResult.sessions) {
       await chrome.storage.local.set({ sessions: [] });
     }
+
+    // Auto-load API key from _env.json if present and not already set
+    await tryLoadEnvApiKey();
+
     log("Initialized");
   } catch (error) {
     logError("Init failed", error);
+  }
+}
+
+async function tryLoadEnvApiKey() {
+  try {
+    const settings = await getSettings();
+    if (settings.googleApiKey) return; // already configured
+
+    const resp = await fetch(chrome.runtime.getURL("_env.json"));
+    if (!resp.ok) return;
+    const env = await resp.json();
+    if (env.GEMINI_API_KEY) {
+      log("Auto-loading API key from _env.json");
+      await saveSettings({
+        ...settings,
+        googleApiKey: env.GEMINI_API_KEY,
+        curatorGoal: env.CURATOR_GOAL || settings.curatorGoal || "Interesting and relevant content",
+        onboardingComplete: true,
+      });
+      log("API key loaded, onboarding auto-completed");
+    }
+  } catch (_) {
+    // _env.json doesn't exist or isn't readable — that's fine
   }
 }
 
