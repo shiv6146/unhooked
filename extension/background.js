@@ -276,7 +276,7 @@ async function handleMessage(message, sender) {
         const { GoogleGenAI: GenAI } = await import("./lib/genai.bundle.js");
         const testAi = new GenAI({ apiKey: message.apiKey });
         await testAi.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-flash",
           contents: "Say 'ok' in one word.",
         });
         return { success: true, valid: true };
@@ -312,13 +312,13 @@ async function startVideoStreaming(tabId, apiKey, streamId, curatorGoal, session
   const systemPrompt = buildSessionPrompt(curatorGoal, sessionInstructions);
   log("System prompt length:", systemPrompt.length);
 
-  log("Connecting to Gemini Live API...");
+  log("Connecting to Gemini frame analyzer...");
   await GeminiLive.connect(apiKey, systemPrompt, (command) => {
     handleScrollCommand(tabId, command);
   }, (status) => {
     log("Gemini Live status change:", status);
   });
-  log("Gemini Live connected successfully");
+  log("Gemini frame analyzer connected successfully");
 
   volatile.geminiConnected = true;
   volatile.frameCount = 0;
