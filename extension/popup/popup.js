@@ -1,866 +1,640 @@
 /**
  * Unhooked Popup Controller
- * Manages UI, settings, and communication with background service worker
  *
- * @fileoverview Popup interface for Unhooked extension
- * @version 1.0.1
- * @updated 2024-02-14
+ * Four modes: Onboarding → Mission Brief → Active Session → Digest View
+ * Plus Digests tab for session history.
  */
 
 // ============================================================================
 // STATE
 // ============================================================================
 
-let currentTab = "agent";
-let statsPoller = null;
-let isPolling = false;
+let currentMode = "onboarding";
+let onboardStep = 1;
+let selectedDuration = 300000;
+let selectedGoals = [];
+let sessionPoller = null;
+let currentDigest = null;
 
 // ============================================================================
-// DOM REFERENCES
+// INIT
 // ============================================================================
 
-const ui = {
-  // Tabs
-  tabAgent: null,
-  tabDigests: null,
-  agentContent: null,
-  digestsContent: null,
-
-  // Status
-  statusIndicator: null,
-  statusText: null,
-
-  // Stats
-  scrollsValue: null,
-  postsValue: null,
-  sessionsValue: null,
-  digestsValue: null,
-
-  // Controls
-  startBtn: null,
-  stopBtn: null,
-  openAgentBtn: null,
-
-  // Settings
-  settingsBtn: null,
-  settingsPanel: null,
-  targetUrlInput: null,
-  durationInput: null,
-  scrollSpeedInput: null,
-  videoCaptureToggle: null,
-  schedulingToggle: null,
-  scheduleSettings: null,
-  scheduleIntervalInput: null,
-  saveSettingsBtn: null,
-
-  // Digests
-  digestsList: null,
-};
-
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
-/**
- * Initialize popup
- */
 async function init() {
-  log("Initializing popup...");
+  bindEvents();
 
-  try {
-    // Get DOM references
-    bindUIElements();
+  const settings = await getSettings();
 
-    // Setup event listeners
-    setupEventListeners();
-
-    // Load settings
-    await loadSettings();
-
-    // Load stats
-    await loadStats();
-
-    // Load digests
-    await loadDigests();
-
-    // Start polling
-    startPolling();
-
-    log("Popup initialized");
-  } catch (error) {
-    logError("Failed to initialize popup", error);
-  }
-}
-
-/**
- * Bind UI elements
- */
-function bindUIElements() {
-  // Tabs
-  ui.tabAgent = document.getElementById("tabAgent");
-  ui.tabDigests = document.getElementById("tabDigests");
-  ui.agentContent = document.getElementById("agentContent");
-  ui.digestsContent = document.getElementById("digestsContent");
-
-  // Status
-  ui.statusIndicator = document.getElementById("statusIndicator");
-  ui.statusText = document.getElementById("statusText");
-
-  // Stats
-  ui.scrollsValue = document.getElementById("scrollsValue");
-  ui.postsValue = document.getElementById("postsValue");
-  ui.sessionsValue = document.getElementById("sessionsValue");
-  ui.digestsValue = document.getElementById("digestsValue");
-
-  // Controls
-  ui.startBtn = document.getElementById("startBtn");
-  ui.stopBtn = document.getElementById("stopBtn");
-  ui.openAgentBtn = document.getElementById("openAgentBtn");
-
-  // Settings
-  ui.settingsBtn = document.getElementById("settingsBtn");
-  ui.settingsPanel = document.getElementById("settingsPanel");
-  ui.apiKeyInput = document.getElementById("apiKeyInput");
-  ui.curatorGoalInput = document.getElementById("curatorGoalInput");
-  ui.streamingMode = document.getElementById("streamingMode");
-  ui.targetUrlInput = document.getElementById("targetUrlInput");
-  ui.durationInput = document.getElementById("durationInput");
-  ui.scrollSpeedInput = document.getElementById("scrollSpeedInput");
-  ui.videoCaptureToggle = document.getElementById("videoCaptureToggle");
-  ui.schedulingToggle = document.getElementById("schedulingToggle");
-  ui.scheduleSettings = document.getElementById("scheduleSettings");
-  ui.scheduleIntervalInput = document.getElementById("scheduleIntervalInput");
-  ui.saveSettingsBtn = document.getElementById("saveSettingsBtn");
-
-  // Digests
-  ui.digestsList = document.getElementById("digestsList");
-}
-
-/**
- * Setup event listeners
- */
-function setupEventListeners() {
-  // Tabs
-  ui.tabAgent?.addEventListener("click", () => switchTab("agent"));
-  ui.tabDigests?.addEventListener("click", () => switchTab("digests"));
-
-  // Controls
-  ui.startBtn?.addEventListener("click", handleStart);
-  ui.stopBtn?.addEventListener("click", handleStop);
-  ui.openAgentBtn?.addEventListener("click", handleOpenAgentTab);
-
-  // Settings
-  ui.settingsBtn?.addEventListener("click", toggleSettings);
-  ui.saveSettingsBtn?.addEventListener("click", handleSaveSettings);
-  ui.schedulingToggle?.addEventListener("change", handleSchedulingToggle);
-
-  // Keyboard shortcuts
-  document.addEventListener("keydown", handleKeyboard);
-}
-
-// ============================================================================
-// TAB SWITCHING
-// ============================================================================
-
-/**
- * Switch between tabs
- */
-function switchTab(tab) {
-  currentTab = tab;
-
-  // Update tab styles
-  if (tab === "agent") {
-    ui.tabAgent?.classList.add("active");
-    ui.tabDigests?.classList.remove("active");
-    ui.agentContent.style.display = "block";
-    ui.digestsContent.style.display = "none";
+  if (settings.onboardingComplete && settings.googleApiKey) {
+    showMainUI(settings);
   } else {
-    ui.tabAgent?.classList.remove("active");
-    ui.tabDigests?.classList.add("active");
-    ui.agentContent.style.display = "none";
-    ui.digestsContent.style.display = "block";
+    showMode("onboarding");
   }
 
-  // Load fresh data for the tab
-  if (tab === "digests") {
-    loadDigests();
-  }
-
-  log(`Switched to ${tab} tab`);
-}
-
-// ============================================================================
-// SETTINGS MANAGEMENT
-// ============================================================================
-
-/**
- * Toggle settings panel visibility
- */
-function toggleSettings() {
-  ui.settingsPanel?.classList.toggle("visible");
-  ui.settingsBtn?.classList.toggle("active");
-}
-
-/**
- * Load settings from background
- */
-/**
- * Load settings from background
- */
-async function loadSettings() {
-  try {
-    const response = await sendMessage({ type: "GET_SETTINGS" });
-
-    if (response?.success && response.settings) {
-      const settings = response.settings;
-
-      // Populate UI
-      if (ui.targetUrlInput) {
-        ui.targetUrlInput.value = settings.targetUrl || "https://twitter.com";
-      }
-      if (ui.durationInput) {
-        ui.durationInput.value = Math.floor(settings.sessionDuration / 60000);
-      }
-      if (ui.scrollSpeedInput) {
-        ui.scrollSpeedInput.value = settings.scrollSpeed;
-      }
-      if (ui.videoCaptureToggle) {
-        ui.videoCaptureToggle.checked = settings.captureVideo;
-      }
-      if (ui.schedulingToggle) {
-        ui.schedulingToggle.checked = settings.enableScheduling;
-      }
-      if (ui.scheduleIntervalInput) {
-        ui.scheduleIntervalInput.value = settings.scheduleInterval;
-      }
-
-      // Update schedule settings visibility
-      updateScheduleSettingsVisibility(settings.enableScheduling);
-
-      // API key
-      if (ui.apiKeyInput) {
-        ui.apiKeyInput.value = settings.googleApiKey || "";
-      }
-
-      if (ui.streamingMode) {
-        ui.streamingMode.textContent = settings.googleApiKey
-          ? "✅ Direct streaming"
-          : "Not set";
-        ui.streamingMode.style.color = settings.googleApiKey
-          ? "#22c55e"
-          : "#64748b";
-      }
-
-      // Curator Goal
-      if (ui.curatorGoalInput) {
-        ui.curatorGoalInput.value = settings.curatorGoal || "";
-      }
-
-      log("Settings loaded", settings);
+  // Listen for digest-ready messages from background
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === "DIGEST_READY" && msg.session) {
+      stopSessionPolling();
+      showDigestView(msg.session);
     }
-  } catch (error) {
-    logError("Failed to load settings", error);
-  }
+  });
+
+  // Check if a session is already active
+  try {
+    const status = await sendMessage({ type: "SESSION_STATUS" });
+    if (status?.active) {
+      showMainUI(settings);
+      showAgentMode("session");
+      startSessionPolling();
+    }
+  } catch (_) {}
 }
 
-/**
- * Save settings to background
- */
-async function handleSaveSettings() {
-  try {
-    const targetUrl = ui.targetUrlInput?.value || "https://twitter.com";
-    const durationMinutes = parseInt(ui.durationInput?.value || "5");
-    const scrollSpeed = parseInt(ui.scrollSpeedInput?.value || "1000");
-    const captureVideo = ui.videoCaptureToggle?.checked || false;
-    const enableScheduling = ui.schedulingToggle?.checked || false;
-    const scheduleInterval = parseInt(ui.scheduleIntervalInput?.value || "120");
+// ============================================================================
+// EVENT BINDING
+// ============================================================================
 
-    const settings = {
-      targetUrl,
-      sessionDuration: durationMinutes * 60000, // Convert to ms
-      scrollSpeed,
-      captureVideo,
-      enableScheduling,
-      scheduleInterval,
-      googleApiKey: ui.apiKeyInput?.value?.trim() || "",
-      curatorGoal: ui.curatorGoalInput?.value?.trim() || "",
-    };
+function bindEvents() {
+  // Tabs
+  $("tabAgent")?.addEventListener("click", () => switchTab("agent"));
+  $("tabDigests")?.addEventListener("click", () => switchTab("digests"));
 
-    const response = await sendMessage({
-      type: "UPDATE_SETTINGS",
-      settings,
+  // Onboarding
+  $("onboardGetStarted")?.addEventListener("click", () => goOnboardStep(2));
+  $("onboardVerifyKey")?.addEventListener("click", verifyApiKey);
+  $("secToggle")?.addEventListener("click", () => {
+    $("secDetail")?.classList.toggle("visible");
+  });
+  $("onboardFinish")?.addEventListener("click", finishOnboarding);
+
+  // Goal chips
+  document.querySelectorAll("#goalChips .chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      chip.classList.toggle("selected");
+      updateGoalFromChips();
     });
+  });
 
-    if (response?.success) {
-      log("Settings saved", settings);
-      showFeedback("✅ Settings saved!");
-    } else {
-      showFeedback("❌ Failed to save settings");
-    }
-  } catch (error) {
-    logError("Failed to save settings", error);
-    showFeedback("❌ Error saving settings");
-  }
-}
+  // Duration buttons
+  document.querySelectorAll(".duration-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".duration-btn").forEach((b) => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedDuration = parseInt(btn.dataset.dur);
+    });
+  });
 
-/**
- * Handle scheduling toggle
- */
-function handleSchedulingToggle() {
-  const enabled = ui.schedulingToggle?.checked || false;
-  updateScheduleSettingsVisibility(enabled);
-}
+  // Mission brief
+  $("startCuratingBtn")?.addEventListener("click", handleStartSession);
 
-/**
- * Update schedule settings visibility
- */
-function updateScheduleSettingsVisibility(enabled) {
-  if (ui.scheduleSettings) {
-    ui.scheduleSettings.style.display = enabled ? "block" : "none";
-  }
+  // Active session
+  $("stopSessionBtn")?.addEventListener("click", handleStopSession);
+
+  // Digest view
+  $("newSessionBtn")?.addEventListener("click", () => showAgentMode("brief"));
+
+  // Settings
+  $("settingsBtn")?.addEventListener("click", toggleSettings);
+  $("settSaveBtn")?.addEventListener("click", saveSettingsPanel);
+  $("settBackBtn")?.addEventListener("click", toggleSettings);
 }
 
 // ============================================================================
-// SESSION CONTROLS
+// ONBOARDING
 // ============================================================================
 
-/**
- * Handle start button click
- */
-async function handleStart() {
-  try {
-    log("Starting session...");
-
-    // Disable button
-    if (ui.startBtn) ui.startBtn.disabled = true;
-
-    // Get current settings
-    const durationMinutes = parseInt(ui.durationInput?.value || "5");
-    const scrollSpeed = parseInt(ui.scrollSpeedInput?.value || "1000");
-    const captureVideo = ui.videoCaptureToggle?.checked || false;
-
-    const config = {
-      sessionDuration: durationMinutes * 60000,
-      scrollSpeed,
-      captureVideo,
-    };
-
-    // Check if API key is set for streaming mode
-    const settingsResp = await sendMessage({ type: "GET_SETTINGS" });
-    const apiKey = settingsResp?.settings?.googleApiKey;
-
-    if (apiKey) {
-      // STREAMING MODE: Use the current tab (where user clicked extension icon)
-      // This tab must be the social media site the user wants to scroll
-      // 1. Capture the current tab's stream (MUST be first to preserve user gesture)
-      log("Requesting tab capture stream ID...");
-      let streamId;
-      try {
-        streamId = await new Promise((resolve, reject) => {
-          chrome.tabCapture.getMediaStreamId({}, (id) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve(id);
-            }
-          });
-        });
-        log("Got tab capture stream ID", streamId);
-      } catch (captureErr) {
-        logError("Tab capture failed", captureErr);
-        showFeedback("❌ Tab capture failed. Reload extension?");
-        if (ui.startBtn) ui.startBtn.disabled = false;
-        return;
-      }
-
-      // 2. Get current tab info
-      const [currentTab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      if (!currentTab?.id) {
-        showFeedback("❌ No active tab found");
-        if (ui.startBtn) ui.startBtn.disabled = false;
-        return;
-      }
-
-      log(`Streaming mode: using current tab ${currentTab.id} (${currentTab.url})`);
-
-      // 3. Start video streaming FIRST (to minimize stream ID expiry risk)
-      config.tabId = currentTab.id;
-
-      log("Sending START_VIDEO_STREAM...", {
-        streamId,
-        tabId: config.tabId,
-      });
-
-      let streamSuccess = false;
-      try {
-        const streamResp = await sendMessage({
-          type: "START_VIDEO_STREAM",
-          streamId,
-          tabId: config.tabId,
-        });
-
-        if (streamResp?.success) {
-          log("Video stream started successfully");
-          updateStatus(true, "🎥 Streaming to Gemini AI");
-          streamSuccess = true;
-        } else {
-          logError("Video stream start failed", streamResp?.error);
-          showFeedback("⚠️ Streaming failed, scroll-only mode");
-        }
-      } catch (videoErr) {
-        logError("Video stream error", videoErr);
-      }
-
-      // 4. Start scroll session on this tab
-      log("Sending START_SCROLL_REQUEST...", config);
-
-      const response = await sendMessage({
-        type: "START_SCROLL_REQUEST",
-        config,
-      });
-
-      if (!response?.success) {
-        logError("Failed to start session", response?.error);
-        showFeedback(`❌ ${response?.error || "Failed to start"}`);
-        // If getting here, we might want to stop video stream if scroll failed?
-        // But let's keep it simple for now.
-        if (ui.startBtn) ui.startBtn.disabled = false;
-        return;
-      }
-
-      if (ui.stopBtn) ui.stopBtn.disabled = false;
-    } else {
-      // NO API KEY: Original flow — create agent tab, scroll only
-      const response = await sendMessage({
-        type: "START_SCROLL_REQUEST",
-        config,
-      });
-
-      if (response?.success) {
-        log("Session started", response);
-        updateStatus(true, `Scrolling on tab ${response.tabId}`);
-        if (ui.stopBtn) ui.stopBtn.disabled = false;
-      } else {
-        logError("Failed to start session", response?.error);
-        showFeedback(`❌ ${response?.error || "Failed to start"}`);
-        if (ui.startBtn) ui.startBtn.disabled = false;
-      }
-    }
-  } catch (error) {
-    logError("Error starting session", error);
-    showFeedback("❌ Error starting session");
-
-    if (ui.startBtn) ui.startBtn.disabled = false;
-  }
+function goOnboardStep(step) {
+  onboardStep = step;
+  ["onboardStep1", "onboardStep2", "onboardStep3"].forEach((id, i) => {
+    $(id).classList.toggle("visible", i + 1 === step);
+  });
+  ["dot1", "dot2", "dot3"].forEach((id, i) => {
+    const dot = $(id);
+    dot.classList.remove("active", "done");
+    if (i + 1 === step) dot.classList.add("active");
+    else if (i + 1 < step) dot.classList.add("done");
+  });
 }
 
-/**
- * Handle stop button click
- */
-async function handleStop() {
-  try {
-    log("Stopping session...");
-
-    // Disable button
-    if (ui.stopBtn) ui.stopBtn.disabled = true;
-
-    const response = await sendMessage({ type: "STOP_SCROLL_REQUEST" });
-
-    if (response?.success) {
-      log("Session stopped");
-      updateStatus(false, "Ready to scroll");
-
-      if (ui.startBtn) ui.startBtn.disabled = false;
-    } else {
-      logError("Failed to stop session", response?.error);
-      showFeedback(`❌ ${response?.error || "Failed to stop"}`);
-
-      if (ui.stopBtn) ui.stopBtn.disabled = false;
-    }
-  } catch (error) {
-    logError("Error stopping session", error);
-    showFeedback("❌ Error stopping session");
-
-    if (ui.stopBtn) ui.stopBtn.disabled = false;
-  }
-}
-
-/**
- * Handle open agent tab button click
- */
-async function handleOpenAgentTab() {
-  try {
-    log("Opening agent tab...");
-
-    const response = await sendMessage({ type: "OPEN_AGENT_TAB" });
-
-    if (response?.success) {
-      log("Agent tab opened", response);
-      showFeedback("✅ Agent tab opened!");
-    } else {
-      logError("Failed to open agent tab", response?.error);
-      showFeedback(`❌ ${response?.error || "Failed to open"}`);
-    }
-  } catch (error) {
-    logError("Error opening agent tab", error);
-    showFeedback("❌ Error opening agent tab");
-  }
-}
-
-// ============================================================================
-// STATS POLLING
-// ============================================================================
-
-/**
- * Start polling for stats
- */
-function startPolling() {
-  if (isPolling) return;
-
-  isPolling = true;
-  pollStats();
-
-  // Poll every second
-  statsPoller = setInterval(pollStats, 1000);
-
-  log("Stats polling started");
-}
-
-/**
- * Stop polling for stats
- */
-function stopPolling() {
-  if (!isPolling) return;
-
-  isPolling = false;
-
-  if (statsPoller) {
-    clearInterval(statsPoller);
-    statsPoller = null;
-  }
-
-  log("Stats polling stopped");
-}
-
-/**
- * Poll stats from background
- */
-async function pollStats() {
-  try {
-    const response = await sendMessage({ type: "GET_STATS" });
-
-    if (response?.success && response.stats) {
-      updateStatsUI(response.stats);
-    }
-  } catch (error) {
-    // Silently fail polling errors to avoid console spam
-  }
-}
-
-/**
- * Load stats once
- */
-async function loadStats() {
-  try {
-    const response = await sendMessage({ type: "GET_STATS" });
-
-    if (response?.success && response.stats) {
-      updateStatsUI(response.stats);
-    }
-  } catch (error) {
-    logError("Failed to load stats", error);
-  }
-}
-
-/**
- * Update stats UI
- */
-function updateStatsUI(stats) {
-  // Update values
-  if (ui.scrollsValue) {
-    ui.scrollsValue.textContent = formatNumber(stats.totalScrolls || 0);
-  }
-
-  // Posts extracted (not yet tracked separately, use scrolls/10 as estimate)
-  if (ui.postsValue) {
-    ui.postsValue.textContent = formatNumber(
-      Math.floor((stats.totalScrolls || 0) / 10),
-    );
-  }
-
-  if (ui.sessionsValue) {
-    ui.sessionsValue.textContent = formatNumber(stats.totalSessions || 0);
-  }
-
-  if (ui.digestsValue) {
-    ui.digestsValue.textContent = formatNumber(stats.totalDigests || 0);
-  }
-
-  // Update status based on active tabs
-  const isActive = stats.activeCount > 0;
-  const statusText = isActive
-    ? `Scrolling in background (${stats.activeCount} session${stats.activeCount > 1 ? "s" : ""})`
-    : "Ready to scroll";
-  updateStatus(isActive, statusText);
-
-  // Update button states
-  if (isActive) {
-    if (ui.startBtn) ui.startBtn.disabled = true;
-    if (ui.stopBtn) ui.stopBtn.disabled = false;
-  } else {
-    if (ui.startBtn) ui.startBtn.disabled = false;
-    if (ui.stopBtn) ui.stopBtn.disabled = true;
-  }
-}
-
-/**
- * Update status indicator
- */
-function updateStatus(active, text) {
-  if (ui.statusIndicator) {
-    if (active) {
-      ui.statusIndicator.classList.add("active");
-    } else {
-      ui.statusIndicator.classList.remove("active");
-    }
-  }
-
-  if (ui.statusText) {
-    ui.statusText.textContent = text;
-  }
-}
-
-// ============================================================================
-// DIGESTS
-// ============================================================================
-
-/**
- * Load and display digests
- */
-async function loadDigests() {
-  try {
-    const response = await sendMessage({ type: "GET_DIGESTS" });
-
-    if (response?.success && response.digests) {
-      displayDigests(response.digests);
-    }
-  } catch (error) {
-    logError("Failed to load digests", error);
-  }
-}
-
-/**
- * Display digests in UI
- */
-function displayDigests(digests) {
-  if (!ui.digestsList) return;
-
-  // Clear existing
-  ui.digestsList.innerHTML = "";
-
-  if (!digests || digests.length === 0) {
-    ui.digestsList.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <div class="empty-text">No digests yet. Start a session to create one!</div>
-      </div>
-    `;
+async function verifyApiKey() {
+  const key = $("onboardApiKey").value.trim();
+  if (!key) {
+    setApiStatus("onboardApiStatus", "Please enter a key", "invalid");
     return;
   }
 
-  // Create digest items
-  digests.forEach((digest) => {
-    const item = createDigestItem(digest);
-    ui.digestsList.appendChild(item);
+  setApiStatus("onboardApiStatus", "Verifying...", "checking");
+  $("onboardVerifyKey").disabled = true;
+
+  try {
+    const resp = await sendMessage({ type: "VALIDATE_API_KEY", apiKey: key });
+    if (resp?.valid) {
+      setApiStatus("onboardApiStatus", "Key is valid!", "valid");
+      await sendMessage({ type: "UPDATE_SETTINGS", settings: { googleApiKey: key } });
+      setTimeout(() => goOnboardStep(3), 600);
+    } else {
+      setApiStatus("onboardApiStatus", `Invalid: ${resp?.error || "unknown error"}`, "invalid");
+    }
+  } catch (err) {
+    setApiStatus("onboardApiStatus", "Verification failed", "invalid");
+  }
+  $("onboardVerifyKey").disabled = false;
+}
+
+function updateGoalFromChips() {
+  const selected = [];
+  document.querySelectorAll("#goalChips .chip.selected").forEach((c) => {
+    selected.push(c.dataset.goal);
+  });
+  selectedGoals = selected;
+
+  const customText = $("onboardGoalInput").value.trim();
+  if (!customText && selected.length > 0) {
+    $("onboardGoalInput").value = selected.join(", ");
+  }
+}
+
+async function finishOnboarding() {
+  const goal = $("onboardGoalInput").value.trim() || selectedGoals.join(", ") || "Interesting content";
+
+  await sendMessage({
+    type: "UPDATE_SETTINGS",
+    settings: {
+      curatorGoal: goal,
+      onboardingComplete: true,
+    },
   });
 
-  log(`Displayed ${digests.length} digests`);
-}
-
-/**
- * Create a digest item element
- */
-function createDigestItem(digest) {
-  const div = document.createElement("div");
-  div.className = "digest-item";
-
-  const timeAgo = formatTimeAgo(digest.timestamp);
-  const duration = formatDuration(digest.duration);
-
-  div.innerHTML = `
-    <div class="digest-header">
-      <div class="digest-time">${timeAgo}</div>
-      ${digest.isScheduled ? '<div class="digest-badge">Scheduled</div>' : ""}
-    </div>
-    <div class="digest-summary">${digest.summary}</div>
-    <div class="digest-stats">
-      <span>⏱️ ${duration}</span>
-      <span>📊 ${digest.postCount} posts</span>
-      <span>📜 ${digest.scrollCount} scrolls</span>
-    </div>
-  `;
-
-  // Click to view details
-  div.addEventListener("click", () => showDigestDetails(digest));
-
-  return div;
-}
-
-/**
- * Show digest details (placeholder)
- */
-function showDigestDetails(digest) {
-  log("Showing digest details", digest);
-  // TODO: Implement detailed view in a modal or separate page
-  alert(
-    `Digest Details:\n\n${digest.summary}\n\nPosts: ${digest.postCount}\nScrolls: ${digest.scrollCount}\nDuration: ${formatDuration(digest.duration)}`,
-  );
+  const settings = await getSettings();
+  showMainUI(settings);
 }
 
 // ============================================================================
-// MESSAGING
+// MAIN UI
 // ============================================================================
 
-/**
- * Send message to background
- */
-async function sendMessage(message) {
+function showMainUI(settings) {
+  $("modeOnboarding").classList.remove("visible");
+  $("modeOnboarding").style.display = "none";
+  $("mainTabs").style.display = "flex";
+  $("agentContent").style.display = "block";
+
+  // Populate brief
+  $("briefGoalInput").value = settings.curatorGoal || "";
+
+  showAgentMode("brief");
+}
+
+function switchTab(tab) {
+  if (tab === "agent") {
+    $("tabAgent").classList.add("active");
+    $("tabDigests").classList.remove("active");
+    $("agentContent").style.display = "block";
+    $("digestsContent").style.display = "none";
+    $("settingsPanel").classList.remove("visible");
+  } else {
+    $("tabAgent").classList.remove("active");
+    $("tabDigests").classList.add("active");
+    $("agentContent").style.display = "none";
+    $("digestsContent").style.display = "block";
+    $("settingsPanel").classList.remove("visible");
+    loadDigestsHistory();
+  }
+}
+
+function showAgentMode(mode) {
+  ["modeBrief", "modeSession", "modeDigest"].forEach((id) => {
+    $(id).classList.remove("visible");
+  });
+  $("mode" + mode.charAt(0).toUpperCase() + mode.slice(1))?.classList.add("visible");
+  currentMode = mode;
+}
+
+function showMode(mode) {
+  ["modeOnboarding"].forEach((id) => {
+    $(id).classList.toggle("visible", id === "mode" + mode.charAt(0).toUpperCase() + mode.slice(1));
+  });
+}
+
+// ============================================================================
+// SESSION START / STOP
+// ============================================================================
+
+async function handleStartSession() {
+  const btn = $("startCuratingBtn");
+  btn.disabled = true;
+
+  const goal = $("briefGoalInput").value.trim();
+  const instructions = $("briefInstructions").value.trim();
+
+  // Save goal
+  await sendMessage({ type: "UPDATE_SETTINGS", settings: { curatorGoal: goal } });
+
+  const settings = await getSettings();
+  if (!settings.googleApiKey) {
+    btn.disabled = false;
+    alert("Please set your API key in Settings first.");
+    return;
+  }
+
+  // Get tab capture stream ID (must be synchronous from user gesture)
+  let streamId;
+  try {
+    streamId = await new Promise((resolve, reject) => {
+      chrome.tabCapture.getMediaStreamId({}, (id) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(id);
+      });
+    });
+  } catch (err) {
+    btn.disabled = false;
+    alert("Tab capture failed: " + err.message);
+    return;
+  }
+
+  // Get current tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    btn.disabled = false;
+    alert("No active tab found.");
+    return;
+  }
+
+  // Start video stream
+  try {
+    const streamResp = await sendMessage({
+      type: "START_VIDEO_STREAM",
+      streamId,
+      tabId: tab.id,
+      sessionInstructions: instructions,
+    });
+    if (!streamResp?.success) {
+      btn.disabled = false;
+      alert("Streaming failed: " + (streamResp?.error || "unknown"));
+      return;
+    }
+  } catch (err) {
+    btn.disabled = false;
+    alert("Streaming error: " + err.message);
+    return;
+  }
+
+  // Start scroll session
+  try {
+    const scrollResp = await sendMessage({
+      type: "START_SCROLL_REQUEST",
+      config: {
+        tabId: tab.id,
+        tabUrl: tab.url,
+        duration: selectedDuration,
+        sessionInstructions: instructions,
+      },
+    });
+    if (!scrollResp?.success) {
+      btn.disabled = false;
+      alert("Scroll start failed: " + (scrollResp?.error || "unknown"));
+      return;
+    }
+  } catch (err) {
+    btn.disabled = false;
+    alert("Scroll error: " + err.message);
+    return;
+  }
+
+  showAgentMode("session");
+  startSessionPolling();
+}
+
+async function handleStopSession() {
+  $("stopSessionBtn").disabled = true;
+  await sendMessage({ type: "STOP_SCROLL_REQUEST" });
+  // Digest will arrive via DIGEST_READY message
+  // But also handle if it doesn't come:
+  setTimeout(async () => {
+    if (currentMode === "session") {
+      stopSessionPolling();
+      showAgentMode("brief");
+      $("stopSessionBtn").disabled = false;
+    }
+  }, 15000);
+}
+
+// ============================================================================
+// SESSION POLLING
+// ============================================================================
+
+function startSessionPolling() {
+  stopSessionPolling();
+  sessionPoller = setInterval(pollSession, 1000);
+  pollSession();
+}
+
+function stopSessionPolling() {
+  if (sessionPoller) {
+    clearInterval(sessionPoller);
+    sessionPoller = null;
+  }
+}
+
+async function pollSession() {
+  try {
+    const resp = await sendMessage({ type: "SESSION_STATUS" });
+    if (!resp?.success) return;
+
+    // Update elapsed
+    const elapsed = resp.elapsed || 0;
+    const min = Math.floor(elapsed / 60000);
+    const sec = Math.floor((elapsed % 60000) / 1000);
+    $("elapsedStat").textContent = `${min}:${sec.toString().padStart(2, "0")}`;
+
+    // Posts / observations
+    $("obsStat").textContent = resp.observationCount || 0;
+    $("postsStat").textContent = resp.scrollCommandCount || 0;
+
+    // Status text
+    const stateText = {
+      normal: "Scrolling through your feed...",
+      slow: "Slowing down... something looks interesting",
+      paused: "Paused. Reading closely...",
+      fast: "Skipping past irrelevant content...",
+      up: "Going back to re-read something...",
+      down: "Scrolling through your feed...",
+    };
+    $("sessionStatusText").innerHTML =
+      `<span class="pulse-dot"></span> ${stateText[resp.scrollState] || stateText.normal}`;
+
+    // Observation preview
+    if (resp.latestObservation) {
+      $("obsPreview").textContent = resp.latestObservation.slice(0, 150);
+    }
+
+    if (!resp.active && currentMode === "session") {
+      stopSessionPolling();
+      // Wait a moment for digest to arrive
+      setTimeout(() => {
+        if (currentMode === "session") showAgentMode("brief");
+      }, 3000);
+    }
+  } catch (_) {}
+}
+
+// ============================================================================
+// DIGEST VIEW
+// ============================================================================
+
+function showDigestView(session) {
+  currentDigest = session;
+  showAgentMode("digest");
+
+  const d = session.digest || {};
+  const dur = formatDuration(session.duration || 0);
+  const platform = session.platform || "feed";
+
+  $("digestSessionHeader").textContent =
+    `SESSION COMPLETE · ${dur} · ${platform} · ${session.postsScanned || 0} posts`;
+
+  $("digestTldr").textContent = d.tldr || "Session complete.";
+
+  // Must-Read
+  const mrContainer = $("digestMustRead");
+  mrContainer.innerHTML = "";
+  if (d.mustRead && d.mustRead.length > 0) {
+    mrContainer.innerHTML = `<div class="section-title">&#128204; MUST-READ (${d.mustRead.length})</div>`;
+    d.mustRead.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "must-read-card";
+      card.innerHTML = `
+        <div class="mr-title">${esc(item.title)}</div>
+        <div class="mr-source">${esc(item.source || "")}</div>
+        <div class="mr-note">${esc(item.agentNote || "")}</div>
+        <div class="mr-excerpt">${esc(item.excerpt || "")}</div>
+        ${item.postUrl ? `<a class="mr-link" href="${esc(item.postUrl)}" target="_blank">Open Post &#8594;</a>` : ""}
+      `;
+      mrContainer.appendChild(card);
+    });
+  }
+
+  // Worth a Look
+  const walContainer = $("digestWorthALook");
+  walContainer.innerHTML = "";
+  if (d.worthALook && d.worthALook.length > 0) {
+    walContainer.innerHTML = `<div class="section-title">&#128064; WORTH A LOOK (${d.worthALook.length})</div>`;
+    d.worthALook.forEach((item) => {
+      const div = document.createElement("div");
+      div.className = "wal-item";
+      div.innerHTML = `<span class="wal-title">${esc(item.title)}</span> <span class="wal-source">${esc(item.source || "")}</span> &mdash; ${esc(item.oneLiner || "")}`;
+      walContainer.appendChild(div);
+    });
+  }
+
+  // Skimmed Past
+  const skimContainer = $("digestSkimmed");
+  skimContainer.innerHTML = "";
+  if (d.skimmedPast) {
+    const cats = d.skimmedPast.categories || {};
+    const catStr = Object.entries(cats).map(([k, v]) => `${k} (${v})`).join(", ");
+    skimContainer.innerHTML = `
+      <div class="section-title" style="cursor:pointer;" id="skimToggle">&#128168; SKIMMED PAST</div>
+      <div class="skimmed-summary">${d.skimmedPast.total || 0} posts: ${catStr}</div>
+    `;
+  }
+
+  // Time saved
+  const tsContainer = $("digestTimeSaved");
+  const timeSavedMin = Math.round((session.timeSaved || 0) / 60);
+  const noiseRate = Math.round((1 - (d.matchRate || 0)) * 100);
+
+  // Get cumulative analytics
+  getAnalytics().then((analytics) => {
+    const cumTimeSaved = formatTimeSavedLong(analytics.totalTimeSaved || 0);
+    const allTimeNoise = Math.round((analytics.avgNoiseRate || 0) * 100);
+
+    tsContainer.innerHTML = `
+      <div class="ts-main">Saved ~${timeSavedMin} min this session</div>
+      <div class="ts-cumulative">${analytics.totalSessions || 0} sessions · ${cumTimeSaved} saved total · ${analytics.totalPostsScanned || 0} posts scanned</div>
+      <div class="noise-bar"><div class="noise-bar-fill" style="width:${noiseRate}%"></div></div>
+      <div class="noise-label">${noiseRate}% noise</div>
+    `;
+  });
+}
+
+// ============================================================================
+// DIGESTS HISTORY TAB
+// ============================================================================
+
+async function loadDigestsHistory() {
+  const resp = await sendMessage({ type: "GET_DIGESTS" });
+  const sessions = resp?.digests || [];
+  const analytics = await getAnalytics();
+
+  const cumCard = $("cumulativeCard");
+  if (sessions.length > 0) {
+    cumCard.style.display = "block";
+    cumCard.innerHTML = `
+      <div class="cc-sessions">${analytics.totalSessions || sessions.length}</div>
+      <div class="cc-detail">sessions · ${formatTimeSavedLong(analytics.totalTimeSaved || 0)} saved · ${analytics.totalPostsScanned || 0} posts scanned</div>
+    `;
+  } else {
+    cumCard.style.display = "none";
+  }
+
+  const list = $("digestsHistoryList");
+  list.innerHTML = "";
+
+  if (sessions.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">&#128493;</div><div class="empty-text">No sessions yet. Start curating!</div></div>`;
+    return;
+  }
+
+  sessions.forEach((s) => {
+    const item = document.createElement("div");
+    item.className = "digest-history-item";
+    item.innerHTML = `
+      <div class="dh-top">
+        <span class="dh-date">${formatTimeAgo(s.timestamp)}</span>
+        <span class="dh-platform">${s.platform || "feed"}</span>
+      </div>
+      <div class="dh-tldr">${esc(s.digest?.tldr || "Session completed")}</div>
+      <div class="dh-stats">
+        <span>~${Math.round((s.timeSaved || 0) / 60)} min saved</span>
+        <span>${s.postsScanned || 0} posts</span>
+        <span>${formatDuration(s.duration || 0)}</span>
+      </div>
+    `;
+    item.addEventListener("click", () => {
+      switchTab("agent");
+      showDigestView(s);
+    });
+    list.appendChild(item);
+  });
+}
+
+// ============================================================================
+// SETTINGS
+// ============================================================================
+
+let settingsVisible = false;
+
+async function toggleSettings() {
+  settingsVisible = !settingsVisible;
+  const panel = $("settingsPanel");
+
+  if (settingsVisible) {
+    panel.classList.add("visible");
+    $("agentContent").style.display = "none";
+    $("digestsContent").style.display = "none";
+    $("mainTabs").style.display = "none";
+
+    const settings = await getSettings();
+    $("settApiKey").value = settings.googleApiKey || "";
+    $("settGoal").value = settings.curatorGoal || "";
+  } else {
+    panel.classList.remove("visible");
+    $("mainTabs").style.display = "flex";
+    $("agentContent").style.display = "block";
+    $("settingsBtn").classList.remove("active");
+  }
+}
+
+async function saveSettingsPanel() {
+  const apiKey = $("settApiKey").value.trim();
+  const goal = $("settGoal").value.trim();
+
+  if (apiKey) {
+    setApiStatus("settApiStatus", "Verifying...", "checking");
+    const resp = await sendMessage({ type: "VALIDATE_API_KEY", apiKey });
+    if (!resp?.valid) {
+      setApiStatus("settApiStatus", "Invalid key: " + (resp?.error || ""), "invalid");
+      return;
+    }
+    setApiStatus("settApiStatus", "Valid!", "valid");
+  }
+
+  await sendMessage({
+    type: "UPDATE_SETTINGS",
+    settings: { googleApiKey: apiKey, curatorGoal: goal },
+  });
+
+  setTimeout(() => toggleSettings(), 500);
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+async function sendMessage(msg) {
   return new Promise((resolve, reject) => {
     try {
-      chrome.runtime.sendMessage(message, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
+      chrome.runtime.sendMessage(msg, (resp) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(resp);
       });
-    } catch (error) {
-      reject(error);
-    }
+    } catch (e) { reject(e); }
   });
 }
 
-// ============================================================================
-// UI HELPERS
-// ============================================================================
+async function getSettings() {
+  const resp = await sendMessage({ type: "GET_SETTINGS" });
+  return resp?.settings || {};
+}
 
-/**
- * Show temporary feedback message
- */
-function showFeedback(message) {
-  if (ui.statusText) {
-    const originalText = ui.statusText.textContent;
-    ui.statusText.textContent = message;
-
-    setTimeout(() => {
-      ui.statusText.textContent = originalText;
-    }, 2000);
+async function getAnalytics() {
+  try {
+    const resp = await sendMessage({ type: "GET_ANALYTICS" });
+    return resp?.analytics || {};
+  } catch (_) {
+    return {};
   }
 }
 
-/**
- * Handle keyboard shortcuts
- */
-function handleKeyboard(event) {
-  // Ctrl/Cmd + Enter: Start
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-    event.preventDefault();
-    if (!ui.startBtn?.disabled) {
-      handleStart();
-    }
-  }
+function $(id) { return document.getElementById(id); }
 
-  // Escape: Stop
-  if (event.key === "Escape") {
-    event.preventDefault();
-    if (!ui.stopBtn?.disabled) {
-      handleStop();
-    }
-  }
+function esc(str) {
+  const div = document.createElement("div");
+  div.textContent = str || "";
+  return div.innerHTML;
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Format number with commas
- */
-function formatNumber(num) {
-  return num.toLocaleString();
+function setApiStatus(id, text, cls) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "api-status " + (cls || "");
 }
 
-/**
- * Format duration in ms to readable string
- */
 function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  } else {
-    return `${seconds}s`;
-  }
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
 }
 
-/**
- * Format timestamp to "time ago" string
- */
-function formatTimeAgo(timestamp) {
-  const now = Date.now();
-  const diff = now - timestamp;
-
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) {
-    return `${days}d ago`;
-  } else if (hours > 0) {
-    return `${hours}h ago`;
-  } else if (minutes > 0) {
-    return `${minutes}m ago`;
-  } else {
-    return "just now";
-  }
+function formatTimeSavedLong(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
-/**
- * Log helper
- */
-function log(...args) {
-  console.log("[Unhooked Popup]", ...args);
-}
-
-/**
- * Error log helper
- */
-function logError(...args) {
-  console.error("[Unhooked Popup ERROR]", ...args);
+function formatTimeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ago`;
+  if (h > 0) return `${h}h ago`;
+  if (m > 0) return `${m}m ago`;
+  return "just now";
 }
 
 // ============================================================================
 // LIFECYCLE
 // ============================================================================
 
-// Initialize when DOM is ready
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
 }
-
-// Cleanup when popup closes
-window.addEventListener("unload", () => {
-  stopPolling();
-  log("Popup closed");
-});

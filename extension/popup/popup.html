@@ -2,660 +2,495 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Unhooked</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            width: 400px;
-            min-height: 500px;
-            max-height: 600px;
-            font-family:
-                -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            overflow: hidden;
-        }
-
-        .container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            max-height: 600px;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px 20px;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        h1 {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .icon-btn {
-            width: 32px;
-            height: 32px;
-            border: none;
-            background: rgba(255, 255, 255, 0.1);
-            color: #e2e8f0;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-        }
-
-        .icon-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .icon-btn.active {
-            background: #3b82f6;
-        }
-
-        /* Content */
-        .content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px 20px;
-        }
-
-        /* Status Card */
-        .status-card {
-            background: rgba(17, 24, 39, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-
-        .status-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #64748b;
-            position: relative;
-        }
-
-        .status-indicator.active {
-            background: #22c55e;
-            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
-        }
-
-        .status-text {
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-
-        .stat-card {
-            background: rgba(11, 18, 32, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 12px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: #3b82f6;
-            margin-bottom: 4px;
-        }
-
-        .stat-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: #94a3b8;
-            font-weight: 600;
-        }
-
-        /* Controls */
-        .controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .btn {
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: none;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            color: white;
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-        }
-
-        .btn-full {
-            grid-column: 1 / -1;
-        }
-
-        /* Settings Panel */
-        .settings-panel {
-            background: rgba(17, 24, 39, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            display: none;
-        }
-
-        .settings-panel.visible {
-            display: block;
-        }
-
-        .settings-title {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .setting-item {
-            margin-bottom: 14px;
-        }
-
-        .setting-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .setting-label {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 13px;
-            margin-bottom: 6px;
-            color: #cbd5e1;
-        }
-
-        .setting-input {
-            width: 100%;
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(11, 18, 32, 0.8);
-            color: #e2e8f0;
-            font-size: 13px;
-        }
-
-        .setting-input:focus {
-            outline: none;
-            border-color: #3b82f6;
-        }
-
-        /* Toggle Switch */
-        .toggle-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 14px;
-        }
-
-        .toggle-label {
-            font-size: 13px;
-            color: #cbd5e1;
-        }
-
-        .toggle {
-            position: relative;
-            width: 44px;
-            height: 24px;
-            background: rgba(71, 85, 105, 0.5);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .toggle input {
-            display: none;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 20px;
-            height: 20px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.3s;
-        }
-
-        .toggle input:checked+.toggle {
-            background: #3b82f6;
-        }
-
-        .toggle input:checked+.toggle .toggle-slider {
-            transform: translateX(20px);
-        }
-
-        /* Digests Panel */
-        .digests-panel {
-            background: rgba(17, 24, 39, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            display: none;
-        }
-
-        .digests-panel.visible {
-            display: block;
-        }
-
-        .digest-item {
-            background: rgba(11, 18, 32, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .digest-item:hover {
-            border-color: rgba(59, 130, 246, 0.5);
-            transform: translateX(2px);
-        }
-
-        .digest-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .digest-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 6px;
-        }
-
-        .digest-time {
-            font-size: 12px;
-            color: #94a3b8;
-        }
-
-        .digest-badge {
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 4px;
-            background: rgba(59, 130, 246, 0.2);
-            color: #3b82f6;
-            font-weight: 600;
-        }
-
-        .digest-summary {
-            font-size: 12px;
-            color: #cbd5e1;
-            line-height: 1.4;
-        }
-
-        .digest-stats {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-            font-size: 11px;
-            color: #94a3b8;
-        }
-
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 32px 16px;
-            color: #64748b;
-        }
-
-        .empty-icon {
-            font-size: 48px;
-            margin-bottom: 12px;
-            opacity: 0.5;
-        }
-
-        .empty-text {
-            font-size: 14px;
-        }
-
-        /* Scrollbar */
-        .content::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .content::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.5);
-        }
-
-        .content::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
-            border-radius: 3px;
-        }
-
-        .content::-webkit-scrollbar-thumb:hover {
-            background: rgba(148, 163, 184, 0.5);
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(11, 18, 32, 0.5);
-            color: #94a3b8;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-        }
-
-        .tab:hover {
-            background: rgba(11, 18, 32, 0.8);
-        }
-
-        .tab.active {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: #3b82f6;
-            color: #3b82f6;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unhooked</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 400px;
+      min-height: 300px;
+      max-height: 600px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-height: 600px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .header-left { display: flex; align-items: center; gap: 10px; }
+
+    .logo {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+
+    h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+
+    .header-actions { display: flex; gap: 6px; }
+
+    .icon-btn {
+      width: 30px; height: 30px; border: none;
+      background: rgba(255,255,255,0.08); color: #e2e8f0;
+      border-radius: 6px; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.15); }
+    .icon-btn.active { background: #3b82f6; }
+
+    /* Content area */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+
+    .content::-webkit-scrollbar { width: 5px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 3px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .tab {
+      flex: 1; padding: 7px 10px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(11,18,32,0.5); color: #94a3b8;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      text-align: center; transition: all 0.2s;
+    }
+    .tab:hover { background: rgba(11,18,32,0.8); }
+    .tab.active { background: rgba(59,130,246,0.2); border-color: #3b82f6; color: #3b82f6; }
+
+    /* Glass card */
+    .glass-card {
+      background: rgba(17, 24, 39, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 11px 16px; border-radius: 10px; border: none;
+      font-weight: 600; font-size: 14px; cursor: pointer;
+      transition: all 0.2s; display: flex; align-items: center;
+      justify-content: center; gap: 6px; width: 100%;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+    }
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+    }
+    .btn-danger:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(239,68,68,0.4);
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.06);
+      color: #94a3b8; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    .btn-sm { padding: 7px 12px; font-size: 12px; }
+
+    /* Inputs */
+    .input {
+      width: 100%; padding: 9px 12px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(11,18,32,0.8); color: #e2e8f0;
+      font-size: 13px; outline: none; transition: border-color 0.2s;
+    }
+    .input:focus { border-color: #3b82f6; }
+    .input::placeholder { color: #475569; }
+
+    /* Labels */
+    .label { font-size: 12px; color: #94a3b8; margin-bottom: 6px; display: block; font-weight: 500; }
+    .hint { font-size: 11px; color: #475569; margin-top: 4px; }
+    .hint a { color: #3b82f6; text-decoration: none; }
+
+    /* Chips */
+    .chip-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .chip {
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; cursor: pointer;
+      background: rgba(255,255,255,0.06); color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.08); transition: all 0.2s;
+    }
+    .chip:hover, .chip.selected {
+      background: rgba(59,130,246,0.2); color: #3b82f6;
+      border-color: rgba(59,130,246,0.4);
+    }
+
+    /* Duration selector */
+    .duration-group { display: flex; gap: 6px; margin-bottom: 12px; }
+    .duration-btn {
+      flex: 1; padding: 8px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; text-align: center;
+      background: rgba(255,255,255,0.06); color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.08); transition: all 0.2s;
+    }
+    .duration-btn.selected {
+      background: rgba(59,130,246,0.2); color: #3b82f6;
+      border-color: rgba(59,130,246,0.4);
+    }
+
+    /* Onboarding steps */
+    .step-indicator {
+      display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;
+    }
+    .step-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); transition: all 0.3s;
+    }
+    .step-dot.active { background: #3b82f6; width: 24px; border-radius: 4px; }
+    .step-dot.done { background: #22c55e; }
+
+    /* Session status */
+    .session-status {
+      text-align: center; padding: 8px 0; font-size: 14px;
+      color: #94a3b8; font-weight: 500;
+    }
+    .session-status.active { color: #22c55e; }
+
+    .pulse-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: #22c55e; margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .stats-row {
+      display: flex; justify-content: space-around; padding: 10px 0;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin-top: 10px;
+    }
+    .stat-item { text-align: center; }
+    .stat-num { font-size: 20px; font-weight: 700; color: #3b82f6; }
+    .stat-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .obs-preview {
+      font-size: 12px; color: #94a3b8; padding: 8px 12px;
+      background: rgba(11,18,32,0.6); border-radius: 8px;
+      margin-top: 10px; font-style: italic; min-height: 36px;
+      line-height: 1.4;
+    }
+
+    /* Digest view */
+    .tldr-card {
+      background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.1));
+      border: 1px solid rgba(59,130,246,0.25);
+      border-radius: 12px; padding: 14px 16px;
+      margin-bottom: 12px; font-size: 14px; line-height: 1.5;
+      color: #e2e8f0;
+    }
+
+    .section-title {
+      font-size: 13px; font-weight: 600; margin-bottom: 8px;
+      color: #94a3b8; display: flex; align-items: center; gap: 6px;
+    }
+
+    .must-read-card {
+      background: rgba(34,197,94,0.06);
+      border: 1px solid rgba(34,197,94,0.15);
+      border-radius: 10px; padding: 12px; margin-bottom: 8px;
+    }
+    .must-read-card .mr-title { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+    .must-read-card .mr-source { font-size: 11px; color: #22c55e; margin-bottom: 4px; }
+    .must-read-card .mr-note { font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-style: italic; }
+    .must-read-card .mr-excerpt { font-size: 12px; color: #cbd5e1; line-height: 1.4; }
+    .must-read-card .mr-link {
+      display: inline-block; margin-top: 6px; font-size: 11px;
+      color: #3b82f6; cursor: pointer; text-decoration: none;
+    }
+
+    .wal-item {
+      font-size: 12px; color: #cbd5e1; padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .wal-item:last-child { border-bottom: none; }
+    .wal-item .wal-title { color: #93c5fd; font-weight: 500; }
+    .wal-item .wal-source { color: #64748b; }
+
+    .skimmed-summary {
+      font-size: 12px; color: #64748b; padding: 8px 0;
+      cursor: pointer;
+    }
+    .skimmed-detail { font-size: 11px; color: #475569; padding: 4px 0; }
+
+    .time-saved-bar {
+      background: rgba(11,18,32,0.6); border-radius: 10px;
+      padding: 12px 14px; margin-top: 12px;
+    }
+    .time-saved-bar .ts-main { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+    .time-saved-bar .ts-cumulative { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .noise-bar {
+      height: 6px; border-radius: 3px; margin-top: 8px;
+      background: rgba(255,255,255,0.06); overflow: hidden;
+    }
+    .noise-bar-fill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #ef4444, #f97316);
+      transition: width 0.5s;
+    }
+    .noise-label { font-size: 11px; color: #f97316; margin-top: 4px; text-align: right; }
+
+    /* Digest history */
+    .digest-history-item {
+      background: rgba(11,18,32,0.5);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px; padding: 12px; margin-bottom: 8px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .digest-history-item:hover {
+      border-color: rgba(59,130,246,0.3);
+      transform: translateX(2px);
+    }
+    .dh-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .dh-date { font-size: 11px; color: #64748b; }
+    .dh-platform { font-size: 10px; color: #3b82f6; background: rgba(59,130,246,0.15); padding: 2px 8px; border-radius: 4px; }
+    .dh-tldr { font-size: 12px; color: #cbd5e1; line-height: 1.4; margin-bottom: 4px; }
+    .dh-stats { display: flex; gap: 12px; font-size: 10px; color: #64748b; }
+
+    .cumulative-card {
+      background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(139,92,246,0.05));
+      border: 1px solid rgba(59,130,246,0.15);
+      border-radius: 12px; padding: 14px; margin-bottom: 14px;
+      text-align: center;
+    }
+    .cumulative-card .cc-sessions { font-size: 22px; font-weight: 700; color: #3b82f6; }
+    .cumulative-card .cc-detail { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 32px 16px; color: #475569; }
+    .empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+    .empty-text { font-size: 13px; }
+
+    /* Trust line */
+    .trust-line { font-size: 10px; color: #475569; text-align: center; margin-top: 10px; }
+
+    /* Security collapsible */
+    .security-toggle { cursor: pointer; color: #3b82f6; font-size: 11px; }
+    .security-detail { font-size: 11px; color: #475569; margin-top: 6px; display: none; line-height: 1.5; }
+    .security-detail.visible { display: block; }
+
+    /* Transition helper */
+    .mode { display: none; }
+    .mode.visible { display: block; }
+
+    /* Title in onboarding */
+    .onboard-title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+    .onboard-sub { font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px; line-height: 1.5; }
+
+    .api-status { font-size: 11px; margin-top: 6px; }
+    .api-status.valid { color: #22c55e; }
+    .api-status.invalid { color: #ef4444; }
+    .api-status.checking { color: #f59e0b; }
+
+    .settings-section { margin-top: 12px; }
+    .settings-section .label { margin-bottom: 4px; }
+  </style>
 </head>
 
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <div class="logo">📜</div>
-                <h1>Unhooked</h1>
-            </div>
-            <div class="header-actions">
-                <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">
-                    ⚙️
-                </button>
-            </div>
-        </div>
-
-        <!-- Content -->
-        <div class="content">
-            <!-- Tabs -->
-            <div class="tabs">
-                <div id="tabAgent" class="tab active">Agent</div>
-                <div id="tabDigests" class="tab">Digests</div>
-            </div>
-
-            <!-- Agent Tab Content -->
-            <div id="agentContent">
-                <!-- Status Card -->
-                <div class="status-card">
-                    <div class="status-row">
-                        <div id="statusIndicator" class="status-indicator"></div>
-                        <div id="statusText" class="status-text">
-                            Ready to scroll
-                        </div>
-                    </div>
-
-                    <!-- Stats Grid -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div id="scrollsValue" class="stat-value">
-                                0
-                            </div>
-                            <div class="stat-label">Scrolls</div>
-                        </div>
-                        <div class="stat-card">
-                            <div id="postsValue" class="stat-value">0</div>
-                            <div class="stat-label">Posts</div>
-                        </div>
-                        <div class="stat-card">
-                            <div id="sessionsValue" class="stat-value">
-                                0
-                            </div>
-                            <div class="stat-label">Sessions</div>
-                        </div>
-                        <div class="stat-card">
-                            <div id="digestsValue" class="stat-value">
-                                0
-                            </div>
-                            <div class="stat-label">Digests</div>
-                        </div>
-                    </div>
-
-                    <!-- Controls -->
-                    <div class="controls">
-                        <button id="startBtn" class="btn btn-primary">
-                            ▶️ Start
-                        </button>
-                        <button id="stopBtn" class="btn btn-danger" disabled>
-                            ⏹️ Stop
-                        </button>
-                    </div>
-
-                    <!-- Open Agent Tab -->
-                    <div class="controls" style="margin-top: 10px">
-                        <button id="openAgentBtn" class="btn btn-full" style="
-                                    background: rgba(59, 130, 246, 0.2);
-                                    color: #3b82f6;
-                                    border: 1px solid rgba(59, 130, 246, 0.3);
-                                ">
-                            👁️ View Agent Tab
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Settings Panel -->
-                <div id="settingsPanel" class="settings-panel">
-                    <div class="settings-title">🔑 Gemini API Key</div>
-
-                    <div class="setting-item">
-                        <div class="setting-label">
-                            <span>Google API Key</span>
-                            <span id="streamingMode" style="font-size: 10px; color: #64748b">Not set</span>
-                        </div>
-                        <input id="apiKeyInput" type="password" class="setting-input"
-                            placeholder="Paste your Google API key" aria-label="Google API key for Gemini" />
-                        <div style="font-size: 10px; color: #64748b; margin-top: 4px">
-                            Get one at <a href="https://aistudio.google.com/apikey" target="_blank"
-                                style="color: #3b82f6">aistudio.google.com</a> — streams video directly to Gemini
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="setting-label">
-                            <span>Curator Goal</span>
-                        </div>
-                        <input id="curatorGoalInput" type="text" class="setting-input"
-                            placeholder="e.g. Save yummy recipes, Like cute cats" aria-label="Curator Goal" />
-                        <div style="font-size: 10px; color: #64748b; margin-top: 4px">
-                            Tell Gemini what to look for
-                        </div>
-                    </div>
-
-                    <div class="settings-title" style="margin-top: 16px">Agent Settings</div>
-
-                    <div class="setting-item">
-                        <div class="setting-label">
-                            <span>Target Site URL</span>
-                        </div>
-                        <input id="targetUrlInput" type="url" class="setting-input" value="https://twitter.com"
-                            placeholder="https://twitter.com" aria-label="Target site URL to scroll" />
-                    </div>
-
-                    <div class="settings-title" style="margin-top: 16px">
-                        Session Settings
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="setting-label">
-                            <span>Duration (minutes)</span>
-                        </div>
-                        <input id="durationInput" type="number" class="setting-input" min="1" max="60" value="5"
-                            aria-label="Session duration in minutes" />
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="setting-label">
-                            <span>Scroll Speed (ms)</span>
-                        </div>
-                        <input id="scrollSpeedInput" type="number" class="setting-input" min="100" max="5000" step="100"
-                            value="1000" aria-label="Scroll speed in milliseconds" />
-                    </div>
-
-                    <div class="toggle-wrapper">
-                        <span class="toggle-label">Video Capture</span>
-                        <label class="toggle">
-                            <input id="videoCaptureToggle" type="checkbox" aria-label="Enable video capture" />
-                            <div class="toggle">
-                                <div class="toggle-slider"></div>
-                            </div>
-                        </label>
-                    </div>
-
-                    <div class="settings-title" style="margin-top: 16px">
-                        Scheduling
-                    </div>
-
-                    <div class="toggle-wrapper">
-                        <span class="toggle-label">Enable Scheduling</span>
-                        <label class="toggle">
-                            <input id="schedulingToggle" type="checkbox" aria-label="Enable automatic scheduling" />
-                            <div class="toggle">
-                                <div class="toggle-slider"></div>
-                            </div>
-                        </label>
-                    </div>
-
-                    <div id="scheduleSettings" style="display: none">
-                        <div class="setting-item">
-                            <div class="setting-label">
-                                <span>Run Every (minutes)</span>
-                            </div>
-                            <input id="scheduleIntervalInput" type="number" class="setting-input" min="30" max="1440"
-                                step="30" value="120" aria-label="Schedule interval in minutes" />
-                        </div>
-                    </div>
-
-                    <div class="controls" style="margin-top: 16px">
-                        <button id="saveSettingsBtn" class="btn btn-primary btn-full">
-                            💾 Save Settings
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Digests Tab Content -->
-            <div id="digestsContent" style="display: none">
-                <div id="digestsList"></div>
-            </div>
-        </div>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="logo">U</div>
+        <h1>Unhooked</h1>
+      </div>
+      <div class="header-actions">
+        <button id="settingsBtn" class="icon-btn" title="Settings">&#9881;</button>
+      </div>
     </div>
 
-    <script src="popup.js"></script>
+    <div class="content">
+      <!-- TABS (hidden during onboarding) -->
+      <div id="mainTabs" class="tabs" style="display:none;">
+        <div id="tabAgent" class="tab active">Curate</div>
+        <div id="tabDigests" class="tab">Digests</div>
+      </div>
+
+      <!-- ================= ONBOARDING ================= -->
+      <div id="modeOnboarding" class="mode visible">
+        <div class="step-indicator">
+          <div id="dot1" class="step-dot active"></div>
+          <div id="dot2" class="step-dot"></div>
+          <div id="dot3" class="step-dot"></div>
+        </div>
+
+        <!-- Step 1: Welcome -->
+        <div id="onboardStep1" class="mode visible">
+          <div class="onboard-title">Stop scrolling.<br>Start living.</div>
+          <div class="onboard-sub">
+            Unhooked scrolls your feed with AI so you don't have to.
+            Get a curated digest of what actually matters.
+          </div>
+          <button id="onboardGetStarted" class="btn btn-primary">Get Started</button>
+          <div class="trust-line">100% read-only. Your agent can only scroll.</div>
+        </div>
+
+        <!-- Step 2: API Key -->
+        <div id="onboardStep2" class="mode">
+          <label class="label">Google API Key</label>
+          <input id="onboardApiKey" type="password" class="input" placeholder="Paste your Google API key" />
+          <div class="hint">
+            Get one free at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>
+          </div>
+          <div id="onboardApiStatus" class="api-status"></div>
+          <button id="onboardVerifyKey" class="btn btn-primary" style="margin-top:12px;">Verify Key</button>
+          <div style="margin-top:10px;">
+            <span class="security-toggle" id="secToggle">How is my key used?</span>
+            <div class="security-detail" id="secDetail">
+              Your key stays local in Chrome storage. It is only sent to Google's API endpoint
+              (generativelanguage.googleapis.com). The extension is open source — no data leaves your browser
+              except to Google.
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Curator Goal -->
+        <div id="onboardStep3" class="mode">
+          <label class="label">What interests you?</label>
+          <div class="chip-group" id="goalChips">
+            <div class="chip" data-goal="AI & Tech">AI & Tech</div>
+            <div class="chip" data-goal="Startups">Startups</div>
+            <div class="chip" data-goal="Finance">Finance</div>
+            <div class="chip" data-goal="Sports">Sports</div>
+            <div class="chip" data-goal="Cooking">Cooking</div>
+            <div class="chip" data-goal="Art & Design">Art & Design</div>
+          </div>
+          <input id="onboardGoalInput" type="text" class="input" placeholder="Or type your own: e.g. AI news, startup funding" />
+          <div class="hint">You can change this before every session.</div>
+          <button id="onboardFinish" class="btn btn-primary" style="margin-top:14px;">Start Curating</button>
+        </div>
+      </div>
+
+      <!-- ================= AGENT TAB CONTENT ================= -->
+      <div id="agentContent" style="display:none;">
+
+        <!-- MODE: Mission Brief (ready to start) -->
+        <div id="modeBrief" class="mode visible">
+          <div class="glass-card">
+            <label class="label">Curator Goal</label>
+            <input id="briefGoalInput" type="text" class="input" placeholder="What should the agent look for?" />
+          </div>
+
+          <div class="glass-card">
+            <label class="label">Anything specific this time?</label>
+            <input id="briefInstructions" type="text" class="input" placeholder="e.g. Also look for EU AI Act posts" />
+            <div class="hint">Optional. Ephemeral — resets after session.</div>
+          </div>
+
+          <label class="label">Duration</label>
+          <div class="duration-group">
+            <div class="duration-btn" data-dur="180000">3 min</div>
+            <div class="duration-btn selected" data-dur="300000">5 min</div>
+            <div class="duration-btn" data-dur="600000">10 min</div>
+          </div>
+
+          <button id="startCuratingBtn" class="btn btn-primary">Start Curating</button>
+          <div class="trust-line">Read-only. Can only scroll.</div>
+        </div>
+
+        <!-- MODE: Active Session -->
+        <div id="modeSession" class="mode">
+          <div class="glass-card">
+            <div id="sessionStatusText" class="session-status active">
+              <span class="pulse-dot"></span> Scrolling through your feed...
+            </div>
+
+            <div class="stats-row">
+              <div class="stat-item">
+                <div id="elapsedStat" class="stat-num">0:00</div>
+                <div class="stat-lbl">Elapsed</div>
+              </div>
+              <div class="stat-item">
+                <div id="postsStat" class="stat-num">0</div>
+                <div class="stat-lbl">Posts</div>
+              </div>
+              <div class="stat-item">
+                <div id="obsStat" class="stat-num">0</div>
+                <div class="stat-lbl">Observations</div>
+              </div>
+            </div>
+
+            <div id="obsPreview" class="obs-preview">Waiting for first observation...</div>
+          </div>
+
+          <button id="stopSessionBtn" class="btn btn-danger">Stop Session</button>
+        </div>
+
+        <!-- MODE: Digest View (after session) -->
+        <div id="modeDigest" class="mode">
+          <div id="digestSessionHeader" style="font-size:12px;color:#64748b;margin-bottom:8px;"></div>
+          <div id="digestTldr" class="tldr-card"></div>
+
+          <div id="digestMustRead"></div>
+          <div id="digestWorthALook"></div>
+          <div id="digestSkimmed"></div>
+          <div id="digestTimeSaved" class="time-saved-bar"></div>
+
+          <button id="newSessionBtn" class="btn btn-primary" style="margin-top:14px;">New Session</button>
+        </div>
+      </div>
+
+      <!-- ================= DIGESTS TAB CONTENT ================= -->
+      <div id="digestsContent" style="display:none;">
+        <div id="cumulativeCard" class="cumulative-card" style="display:none;"></div>
+        <div id="digestsHistoryList"></div>
+      </div>
+
+      <!-- ================= SETTINGS PANEL ================= -->
+      <div id="settingsPanel" class="mode">
+        <div class="glass-card">
+          <label class="label">Google API Key</label>
+          <input id="settApiKey" type="password" class="input" placeholder="API key" />
+          <div id="settApiStatus" class="api-status"></div>
+        </div>
+        <div class="glass-card">
+          <label class="label">Default Curator Goal</label>
+          <input id="settGoal" type="text" class="input" placeholder="e.g. AI news, startup funding" />
+        </div>
+        <button id="settSaveBtn" class="btn btn-primary btn-sm">Save Settings</button>
+        <button id="settBackBtn" class="btn btn-ghost btn-sm" style="margin-top:6px;">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 
 </html>
