@@ -127,10 +127,15 @@ async function handleMessage(message, sender) {
   switch (type) {
     // -- Session lifecycle --
     case "START_VIDEO_STREAM": {
+      log("Received START_VIDEO_STREAM", { tabId: message.tabId, hasStreamId: !!message.streamId });
       const { tabId, streamId } = message;
-      if (!streamId) return { success: false, error: "No streamId" };
+      if (!streamId) {
+        logError("No streamId in START_VIDEO_STREAM");
+        return { success: false, error: "No streamId" };
+      }
 
       const settings = await getSettings();
+      log("Settings loaded", { hasApiKey: !!settings.googleApiKey, keyLen: settings.googleApiKey?.length });
       if (!settings.googleApiKey) return { success: false, error: "No API key configured" };
 
       try {
@@ -143,8 +148,8 @@ async function handleMessage(message, sender) {
         );
         return { success: true };
       } catch (err) {
-        logError("Video streaming failed", err);
-        return { success: false, error: err.message };
+        logError("Video streaming failed:", err?.message || err, err?.stack?.slice(0, 300));
+        return { success: false, error: err?.message || String(err) };
       }
     }
 
@@ -186,6 +191,13 @@ async function handleMessage(message, sender) {
       if (GeminiLive.isConnected() && message.data) {
         GeminiLive.sendFrame(message.data);
         volatile.frameCount++;
+        if (volatile.frameCount <= 3 || volatile.frameCount % 10 === 0) {
+          log(`Frame #${volatile.frameCount} sent to Gemini (${Math.round(message.data.length / 1024)}KB)`);
+        }
+      } else if (!GeminiLive.isConnected()) {
+        if (volatile.frameCount === 0) {
+          log("Frame received but Gemini not connected, dropping");
+        }
       }
       return { success: true };
     }
@@ -294,14 +306,19 @@ async function handleMessage(message, sender) {
 
 async function startVideoStreaming(tabId, apiKey, streamId, curatorGoal, sessionInstructions) {
   log("Starting video streaming pipeline for tab", tabId);
+  log("API key length:", apiKey?.length, "| streamId length:", streamId?.length);
+  log("Curator goal:", curatorGoal);
 
   const systemPrompt = buildSessionPrompt(curatorGoal, sessionInstructions);
+  log("System prompt length:", systemPrompt.length);
 
+  log("Connecting to Gemini Live API...");
   await GeminiLive.connect(apiKey, systemPrompt, (command) => {
     handleScrollCommand(tabId, command);
   }, (status) => {
-    log("Gemini status:", status);
+    log("Gemini Live status change:", status);
   });
+  log("Gemini Live connected successfully");
 
   volatile.geminiConnected = true;
   volatile.frameCount = 0;
@@ -310,6 +327,7 @@ async function startVideoStreaming(tabId, apiKey, streamId, curatorGoal, session
 
   // Create offscreen document
   if (!volatile.offscreenCreated) {
+    log("Creating offscreen document...");
     try {
       await chrome.offscreen.createDocument({
         url: "offscreen.html",
@@ -317,19 +335,25 @@ async function startVideoStreaming(tabId, apiKey, streamId, curatorGoal, session
         justification: "Extract video frames from tab capture for AI analysis",
       });
       volatile.offscreenCreated = true;
+      log("Offscreen document created");
     } catch (err) {
-      if (!err.message.includes("Only a single offscreen")) throw err;
+      if (!err.message.includes("Only a single offscreen")) {
+        logError("Offscreen document creation failed:", err.message);
+        throw err;
+      }
       volatile.offscreenCreated = true;
+      log("Offscreen document already exists, reusing");
     }
   }
 
   // Start frame extraction
+  log("Sending START_FRAME_EXTRACTION with streamId...");
   await chrome.runtime.sendMessage({
     type: "START_FRAME_EXTRACTION",
     streamId: streamId,
   });
 
-  log("Video streaming pipeline started");
+  log("Video streaming pipeline fully started");
 }
 
 async function stopVideoStreaming() {
