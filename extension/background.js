@@ -9,6 +9,9 @@ import * as GeminiLive from "./lib/gemini-live.js";
 import { buildSessionPrompt } from "./lib/prompts.js";
 import { generateDigest, computeTimeSaved, updateAnalytics } from "./lib/digest.js";
 
+// Circular buffer of recent scroll actions for live feed display
+const recentActions = [];
+
 // ============================================================================
 // STATE
 // ============================================================================
@@ -268,6 +271,8 @@ async function handleMessage(message, sender) {
         latestObservation: volatile.latestObservation,
         frameCount: volatile.frameCount,
         scrollCommandCount: volatile.scrollCommandCount,
+        recentActions: recentActions.slice(-8),
+        tokenUsage: GeminiLive.getTokenUsage(),
       };
     }
 
@@ -387,7 +392,6 @@ function handleScrollCommand(tabId, command) {
   volatile.currentScrollState = stateMap[command.scroll] || "normal";
   volatile.latestObservation = command.observation;
 
-  // Append to in-memory observation log
   const entry = {
     timestamp: Date.now(),
     scroll: command.scroll,
@@ -395,20 +399,27 @@ function handleScrollCommand(tabId, command) {
     relevance: command.relevance,
   };
 
-  // Attach most recent post URL if relevance is high/medium
   if ((command.relevance === "high" || command.relevance === "medium") && volatile.postUrls.length > 0) {
     entry.postUrl = volatile.postUrls[volatile.postUrls.length - 1];
   }
 
   volatile.currentObservations.push(entry);
 
-  // Forward to content script
+  // Add to recent actions feed (keep last 20)
+  recentActions.push({
+    time: Date.now(),
+    scroll: command.scroll,
+    obs: command.observation.slice(0, 120),
+    relevance: command.relevance,
+  });
+  if (recentActions.length > 20) recentActions.shift();
+
   sendMessageToTab(tabId, {
     type: "SCROLL_COMMAND",
     action: "SCROLL_COMMAND",
     scroll: command.scroll,
     observation: command.observation,
-  }).catch((err) => logError("Failed to forward scroll command", err));
+  }).catch(() => {});
 
   if (volatile.scrollCommandCount % 5 === 0) {
     log(`Commands: ${volatile.scrollCommandCount}, Observations: ${volatile.currentObservations.length}`);
@@ -483,6 +494,8 @@ async function endSession(scrollCompleteMsg) {
 
   const timeSaved = computeTimeSaved(postsScanned);
 
+  const sessionTokens = GeminiLive.getTokenUsage();
+
   const sessionRecord = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     timestamp: volatile.sessionStartTime || Date.now(),
@@ -493,6 +506,7 @@ async function endSession(scrollCompleteMsg) {
     postsScanned,
     digest,
     timeSaved,
+    tokenUsage: sessionTokens,
     scrollAudit: auditLog.slice(0, 200),
   };
 

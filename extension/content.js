@@ -259,14 +259,18 @@ async function stopScrolling() {
   console.log(`[Unhooked] Session complete: ${postsScanned} posts in ${Math.round(duration / 1000)}s`);
 
   try {
-    await chrome.runtime.sendMessage({
-      type: "SCROLL_COMPLETE",
-      postsScanned: postsScanned,
-      duration: duration,
-      auditLog: scrollAuditLog,
-    });
+    if (chrome.runtime?.id) {
+      await chrome.runtime.sendMessage({
+        type: "SCROLL_COMPLETE",
+        postsScanned: postsScanned,
+        duration: duration,
+        auditLog: scrollAuditLog,
+      });
+    }
   } catch (error) {
-    console.error("[Unhooked] Failed to notify background:", error);
+    if (!error.message?.includes("Extension context invalidated")) {
+      console.error("[Unhooked] Failed to notify background:", error);
+    }
   }
 }
 
@@ -371,6 +375,7 @@ function detectSite() {
 
 function sendProgressUpdate() {
   try {
+    if (!chrome.runtime?.id) return;
     chrome.runtime.sendMessage({
       type: "CAPTURE_UPDATE",
       scrollCount: postsScanned,

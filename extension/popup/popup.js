@@ -368,6 +368,11 @@ async function pollSession() {
       $("obsPreview").textContent = resp.latestObservation.slice(0, 150);
     }
 
+    // Live action feed
+    if (resp.recentActions && resp.recentActions.length > 0) {
+      renderActionFeed(resp.recentActions);
+    }
+
     if (!resp.active && currentMode === "session") {
       stopSessionPolling();
       // Wait a moment for digest to arrive
@@ -376,6 +381,26 @@ async function pollSession() {
       }, 3000);
     }
   } catch (_) {}
+}
+
+function renderActionFeed(actions) {
+  const feed = $("actionFeed");
+  if (!feed) return;
+
+  const scrollMap = {
+    SCROLL_PAUSE: { label: "PAUSE", cls: "pause" },
+    SCROLL_SLOW: { label: "SLOW", cls: "slow" },
+    SCROLL_FAST: { label: "SKIP", cls: "fast" },
+    SCROLL_DOWN: { label: "SCROLL", cls: "down" },
+    SCROLL_UP: { label: "BACK", cls: "up" },
+  };
+
+  feed.innerHTML = actions.slice().reverse().map((a) => {
+    const { label, cls } = scrollMap[a.scroll] || { label: "?", cls: "down" };
+    return `<div class="action-item"><span class="action-badge ${cls}">${label}</span><span class="action-obs">${esc(a.obs)}</span></div>`;
+  }).join("");
+
+  feed.scrollTop = 0;
 }
 
 // ============================================================================
@@ -439,21 +464,23 @@ function showDigestView(session) {
     `;
   }
 
-  // Time saved
+  // Time saved + token usage
   const tsContainer = $("digestTimeSaved");
   const timeSavedMin = Math.round((session.timeSaved || 0) / 60);
   const noiseRate = Math.round((1 - (d.matchRate || 0)) * 100);
+  const tokens = session.tokenUsage || {};
+  const totalTokens = (tokens.totalInputTokens || 0) + (tokens.totalOutputTokens || 0);
+  const estCost = (totalTokens / 1000000 * 0.15).toFixed(4); // ~$0.15/1M tokens for flash
 
-  // Get cumulative analytics
   getAnalytics().then((analytics) => {
     const cumTimeSaved = formatTimeSavedLong(analytics.totalTimeSaved || 0);
-    const allTimeNoise = Math.round((analytics.avgNoiseRate || 0) * 100);
 
     tsContainer.innerHTML = `
       <div class="ts-main">Saved ~${timeSavedMin} min this session</div>
       <div class="ts-cumulative">${analytics.totalSessions || 0} sessions · ${cumTimeSaved} saved total · ${analytics.totalPostsScanned || 0} posts scanned</div>
       <div class="noise-bar"><div class="noise-bar-fill" style="width:${noiseRate}%"></div></div>
       <div class="noise-label">${noiseRate}% noise</div>
+      ${totalTokens > 0 ? `<div class="token-stats">Tokens: ${totalTokens.toLocaleString()} · Est. cost: $${estCost}</div>` : ""}
     `;
   });
 }
