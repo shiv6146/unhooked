@@ -42,74 +42,65 @@ Say: "Wait, let me go back to that." Then describe what you want to re-read.
 - Respond to EVERY new screen. Don't go silent.
 - If you see loading spinners or empty space, say "Still loading, scrolling on."`;
 
-const DIGEST_GENERATION_PROMPT = `You are Unhooked's digest writer. Given a log of observations from an AI agent that scrolled a social media feed, produce a structured digest JSON.
+const DIGEST_GENERATION_PROMPT = `You are a digest writer for a social media curation app. You will receive:
+1. SCREENSHOTS captured during a scroll session — these are the ONLY source of truth
+2. An observation log with scroll decisions (use ONLY to know which moments were deemed interesting, NOT as a content source)
+3. Session metadata including the user's curator goal
 
-## Input
-You will receive:
-- An observation log: array of {timestamp, scroll, observation, relevance, postUrl?}
-- Session metadata: {platform, curatorGoal, duration, postsScanned}
+## YOUR ONLY JOB
+Look at the screenshots. Read the ACTUAL text, titles, author names, and content visible in them. Create a digest based SOLELY on what you can literally read in the images.
 
-## Output (valid JSON, no markdown fences)
+## ABSOLUTE RULES
+- EVERY title in your output MUST be COPIED VERBATIM from a screenshot. Do NOT paraphrase, summarize, or rephrase titles. Copy them exactly as written.
+- If you cannot read the exact title text in any screenshot, do NOT include that item. Leave mustRead and worthALook as empty arrays [].
+- Do NOT guess what a title might say based on partial text. Either you can read it fully or you skip it.
+- The scroll decisions data is NOT a content source. It only tells you timing signals.
+- Return EMPTY arrays rather than fabricating or paraphrasing ANY content.
+- If screenshots are too small or blurry to read text, say "Screenshots were not clear enough to read content" in the TL;DR and return empty arrays.
+
+## Output (valid JSON only, no markdown)
 {
-  "tldr": "One casual sentence summarizing the session",
+  "tldr": "One casual sentence about what was ACTUALLY on the feed based on screenshots",
   "mustRead": [
     {
-      "title": "Punchy interesting title",
-      "source": "@handle or publication",
-      "agentNote": "Why the user should care — be opinionated, one sentence",
-      "excerpt": "1-2 sentence preview of the actual content",
+      "title": "EXACT title readable in a screenshot",
+      "source": "Author/handle readable in screenshot, or empty string if not visible",
+      "agentNote": "Why this matches the curator goal — one sentence",
+      "excerpt": "Text you can actually read from the screenshot",
       "relevance": "high"
     }
   ],
   "worthALook": [
     {
-      "title": "Brief title",
-      "source": "@handle",
-      "oneLiner": "Why in under 10 words"
+      "title": "Title readable in screenshot",
+      "source": "",
+      "oneLiner": "Brief reason in under 10 words"
     }
   ],
   "skimmedPast": {
-    "total": 89,
-    "categories": {"Memes": 34, "Ads": 21, "Celebrity": 18, "Other": 16}
+    "total": 0,
+    "categories": {}
   },
-  "feedMood": "One casual phrase about the overall vibe",
-  "matchRate": 0.08
+  "feedMood": "Overall vibe based on screenshots",
+  "matchRate": 0.0
 }
 
-## TL;DR Rules
-Write this like you're texting a friend who asked "anything good on my feed today?"
-- One sentence. Be casual, be opinionated.
-- If the feed was boring, say so. If there's one amazing thing, lead with it.
-- Never be corporate. Never be generic.
-Good examples:
-- "Mostly AI drama today. One must-read thread on EU regulation."
-- "Honestly? Not much going on. Your feed was 80% memes."
-- "Two great startup threads and a funding announcement you should see."
-- "Your feed was a dumpster fire of political takes. I found one cooking video though."
+## TL;DR
+Write like texting a friend. Be honest. If you can read specific titles, mention them. If text is too small to read clearly, describe what TYPE of content you see (text posts, images, video thumbnails, links) without guessing specific titles. Example: "Scrolled through about 30 tech/programming posts. Couldn't read all the titles but saw posts about LLMs and privacy."
 
-## Must-Read Rules
-These are observations where the agent PAUSED (relevance: "high").
-- Give each a punchy title (not the literal post title, but what makes it interesting)
-- agentNote: be opinionated — "This is the best thing on your feed today" > "This post discusses AI"
-- excerpt: 1-2 sentences of actual content
-- If there are 0 must-reads, return empty array
+## Must-Read (max 3)
+ONLY posts where you can READ the EXACT COMPLETE title text in a screenshot AND it matches the curator goal. Copy the title character-for-character. If you can only read partial text, SKIP that item. Empty array [] is the correct response when text is not readable.
 
-## Worth a Look Rules
-Observations where the agent SLOWED DOWN (relevance: "medium").
-- Brief one-liners. Title + source + why in under 10 words.
-- Max 5 items
+## Worth a Look (max 5)
+Posts visible in screenshots that are somewhat interesting but not top priority. Empty array is fine.
 
-## Skimmed Past Rules
-Everything else. Categorize into 4-6 buckets with counts.
-Common categories: Ads, Memes, Celebrity, Political, Self-promotion, Cooking, Tech, Sports, Other.
-
-## Feed Mood
-One casual phrase: "Mostly chill vibes" or "Heated AI debate everywhere" or "A slow news day"
+## Skimmed Past
+Count visible posts in screenshots that don't match the goal. Categorize by what you SEE (tech, news, memes, ads, etc.)
 
 ## Match Rate
-(mustRead count + worthALook count) / total posts scanned. Return as decimal 0-1.
+(mustRead + worthALook) / total visible posts in screenshots.
 
-Output ONLY valid JSON. No explanation, no markdown.`;
+Output ONLY valid JSON.`;
 
 export function buildSessionPrompt(defaultGoal, sessionInstructions) {
   let prompt = CURATOR_SCROLL_PROMPT.replace(
@@ -130,11 +121,23 @@ export function buildSessionPrompt(defaultGoal, sessionInstructions) {
 }
 
 export function buildDigestPrompt(observationLog, sessionMeta) {
-  const input = JSON.stringify(
-    { observations: observationLog, session: sessionMeta },
-    null,
-    2
-  );
+  // Strip observation TEXT from the log to prevent hallucinated narration
+  // from polluting the digest. Only keep scroll decisions and relevance signals.
+  const cleanedLog = observationLog.map((o) => ({
+    scroll: o.scroll,
+    relevance: o.relevance,
+    timestamp: o.timestamp,
+  }));
 
-  return `${DIGEST_GENERATION_PROMPT}\n\n## Session Data\n${input}`;
+  const input = JSON.stringify({
+    scrollDecisions: cleanedLog,
+    session: {
+      platform: sessionMeta.platform,
+      curatorGoal: sessionMeta.curatorGoal,
+      duration: sessionMeta.duration,
+      postsScanned: sessionMeta.postsScanned,
+    },
+  }, null, 2);
+
+  return `${DIGEST_GENERATION_PROMPT}\n\n## Session Scroll Decisions (DO NOT use as content source)\n${input}\n\n## REMINDER: Extract ALL content (titles, authors, excerpts) ONLY from the screenshots above. The scroll decisions only tell you which moments were deemed interesting.`;
 }

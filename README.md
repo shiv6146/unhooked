@@ -23,35 +23,28 @@ The agent is **completely read-only** — it can only scroll. It cannot like, sa
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌───────────────────────┐
-│  Chrome Tab  │────>│  Offscreen   │────>│   Gemini Live API     │
-│  (Feed)      │     │  Document    │     │   (bidiGenerateContent)│
-│              │     │  1 FPS JPEG  │     │   WebSocket            │
-└──────┬───────┘     └──────────────┘     └───────────┬───────────┘
-       │                                               │
-       │  SCROLL_COMMAND                    Audio transcript
-       │  (PAUSE/SLOW/FAST/DOWN/UP)        (outputAudioTranscription)
-       │                                               │
-┌──────▼───────┐     ┌──────────────┐     ┌───────────▼───────────┐
-│  Content     │<────│  Background  │<────│   NLP Parse           │
-│  Script      │     │  Service     │     │   transcript → scroll │
-│  Scroll SM   │     │  Worker      │     │   commands            │
-└──────────────┘     └──────┬───────┘     └───────────────────────┘
-                            │
-                            │ Session End
-                            ▼
-                     ┌──────────────┐     ┌───────────────────────┐
-                     │  Digest Gen  │────>│   gemini-2.5-flash    │
-                     │  (generateContent) │   (text-only)         │
-                     └──────┬───────┘     └───────────────────────┘
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │  Popup UI    │
-                     │  Rich Digest │
-                     │  + History   │
-                     └──────────────┘
+```mermaid
+flowchart TB
+    subgraph Extension["Chrome Extension"]
+        Tab["Chrome Tab<br/>(Feed)"]
+        Offscreen["Offscreen Document<br/>1 FPS JPEG"]
+        Background["Background<br/>Service Worker"]
+        Content["Content Script<br/>Scroll State Machine"]
+        Popup["Popup UI<br/>Rich Digest + History"]
+    end
+
+    subgraph Gemini["Gemini API"]
+        Live["Gemini Live API<br/>bidiGenerateContent<br/>WebSocket"]
+        DigestModel["gemini-2.5-flash<br/>generateContent"]
+    end
+
+    Tab -->|"tab capture"| Offscreen
+    Offscreen -->|"video frames"| Live
+    Live -->|"outputAudioTranscription"| Background
+    Background -->|"SCROLL_COMMAND<br/>PAUSE/SLOW/FAST/DOWN/UP"| Content
+    Background -->|"Session End<br/>generateContent"| DigestModel
+    DigestModel -->|"digest"| Background
+    Background -->|"display"| Popup
 ```
 
 ## Tech Stack

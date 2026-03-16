@@ -12,7 +12,7 @@ const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
 const FRAME_WIDTH = 512;
 const FRAME_HEIGHT = 512;
-const JPEG_QUALITY = 0.5;
+const JPEG_QUALITY = 0.6;
 const FRAME_INTERVAL_MS = 1000;
 const CHANGE_THRESHOLD = 0.02; // 2% pixel change required
 const MAX_SKIP_COUNT = 3; // Send at least every 3 seconds even if no change

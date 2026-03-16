@@ -233,7 +233,6 @@ async function startScrolling(config = {}) {
     }
   }, duration);
 
-  // Start scrolling at normal speed
   startScrollInterval();
 
   console.log("[Unhooked] Scrolling session started");

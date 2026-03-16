@@ -30,6 +30,7 @@ const volatile = {
   latestObservation: null,
   currentScrollState: "normal",
   postUrls: [],
+  recordedFrames: [],   // sampled JPEG frames for digest grounding
 };
 
 const DEFAULT_SETTINGS = {
@@ -180,6 +181,7 @@ async function handleMessage(message, sender) {
       volatile.currentObservations = [];
       volatile.postUrls = [];
       volatile.currentScrollState = "normal";
+      volatile.recordedFrames = [];
 
       await updateBadge("ON");
       return { success: true, tabId };
@@ -195,8 +197,14 @@ async function handleMessage(message, sender) {
       if (GeminiLive.isConnected() && message.data) {
         GeminiLive.sendFrame(message.data);
         volatile.frameCount++;
+
+        // Sample every 3rd frame for digest grounding (keep max 40 frames)
+        if (volatile.frameCount % 3 === 0 && volatile.recordedFrames.length < 40) {
+          volatile.recordedFrames.push(message.data);
+        }
+
         if (volatile.frameCount <= 3 || volatile.frameCount % 10 === 0) {
-          log(`Frame #${volatile.frameCount} sent to Gemini (${Math.round(message.data.length / 1024)}KB)`);
+          log(`Frame #${volatile.frameCount} sent (recorded: ${volatile.recordedFrames.length})`);
         }
       } else if (!GeminiLive.isConnected()) {
         if (volatile.frameCount === 0) {
@@ -230,6 +238,10 @@ async function handleMessage(message, sender) {
       if (message.urls) {
         volatile.postUrls.push(...message.urls);
       }
+      return { success: true };
+    }
+
+    case "VISIBLE_TEXT_UPDATE": {
       return { success: true };
     }
 
@@ -468,11 +480,12 @@ async function endSession(scrollCompleteMsg) {
     postsScanned,
   };
 
-  // Generate digest
+  // Generate digest grounded in recorded video frames
   let digest;
   try {
     if (settings.googleApiKey && observationLog.length > 0) {
-      digest = await generateDigest(settings.googleApiKey, observationLog, sessionMeta);
+      log(`Generating digest with ${volatile.recordedFrames.length} recorded frames for grounding`);
+      digest = await generateDigest(settings.googleApiKey, observationLog, sessionMeta, volatile.recordedFrames);
     }
   } catch (err) {
     logError("Digest generation failed", err);
