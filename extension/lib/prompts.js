@@ -120,11 +120,23 @@ export function buildSessionPrompt(defaultGoal, sessionInstructions) {
 }
 
 export function buildDigestPrompt(observationLog, sessionMeta) {
-  const input = JSON.stringify(
-    { observations: observationLog, session: sessionMeta },
-    null,
-    2
-  );
+  // Strip observation TEXT from the log to prevent hallucinated narration
+  // from polluting the digest. Only keep scroll decisions and relevance signals.
+  const cleanedLog = observationLog.map((o) => ({
+    scroll: o.scroll,
+    relevance: o.relevance,
+    timestamp: o.timestamp,
+  }));
 
-  return `${DIGEST_GENERATION_PROMPT}\n\n## Session Data\n${input}`;
+  const input = JSON.stringify({
+    scrollDecisions: cleanedLog,
+    session: {
+      platform: sessionMeta.platform,
+      curatorGoal: sessionMeta.curatorGoal,
+      duration: sessionMeta.duration,
+      postsScanned: sessionMeta.postsScanned,
+    },
+  }, null, 2);
+
+  return `${DIGEST_GENERATION_PROMPT}\n\n## Session Scroll Decisions (DO NOT use as content source)\n${input}\n\n## REMINDER: Extract ALL content (titles, authors, excerpts) ONLY from the screenshots above. The scroll decisions only tell you which moments were deemed interesting.`;
 }
