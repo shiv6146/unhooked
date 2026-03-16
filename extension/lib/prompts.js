@@ -86,7 +86,7 @@ Look at the screenshots. Read the ACTUAL text, titles, author names, and content
 }
 
 ## TL;DR
-Write like texting a friend. Be honest about what's actually there. If the feed was boring, say so.
+Write like texting a friend. Be honest. If you can read specific titles, mention them. If text is too small to read clearly, describe what TYPE of content you see (text posts, images, video thumbnails, links) without guessing specific titles. Example: "Scrolled through about 30 tech/programming posts. Couldn't read all the titles but saw posts about LLMs and privacy."
 
 ## Must-Read (max 3)
 ONLY posts where you can READ the EXACT COMPLETE title text in a screenshot AND it matches the curator goal. Copy the title character-for-character. If you can only read partial text, SKIP that item. Empty array [] is the correct response when text is not readable.

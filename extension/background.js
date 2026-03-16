@@ -198,8 +198,8 @@ async function handleMessage(message, sender) {
         GeminiLive.sendFrame(message.data);
         volatile.frameCount++;
 
-        // Sample every 5th frame for digest grounding (keep max 30 frames ~540KB)
-        if (volatile.frameCount % 5 === 0 && volatile.recordedFrames.length < 30) {
+        // Sample every 3rd frame for digest grounding (keep max 40 frames)
+        if (volatile.frameCount % 3 === 0 && volatile.recordedFrames.length < 40) {
           volatile.recordedFrames.push(message.data);
         }
 

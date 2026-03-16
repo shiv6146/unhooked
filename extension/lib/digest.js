@@ -9,7 +9,7 @@
 import { GoogleGenAI } from "./genai.bundle.js";
 import { buildDigestPrompt } from "./prompts.js";
 
-const MAX_FRAMES_FOR_DIGEST = 15;
+const MAX_FRAMES_FOR_DIGEST = 20;
 
 /**
  * Generate a structured digest from the observation log.
@@ -44,7 +44,7 @@ export async function generateDigest(apiKey, observationLog, sessionMeta, record
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts }],
-      config: { temperature: 0.3, maxOutputTokens: 2000 },
+      config: { temperature: 0.1, maxOutputTokens: 2000 },
     });
 
     const text = result.text || "";
