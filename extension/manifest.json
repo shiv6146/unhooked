@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Unhooked - Background Scroll Agent",
+  "name": "Unhooked — AI Feed Curator",
   "version": "1.0.0",
-  "description": "Automated background scrolling agent that digests your social feeds while you browse freely",
+  "description": "Stop scrolling. Start living. AI scrolls your feed and delivers a curated digest of what actually matters.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -11,12 +11,9 @@
   },
   "permissions": [
     "storage",
-    "alarms",
     "tabs",
     "activeTab",
     "scripting",
-    "notifications",
-    "downloads",
     "tabCapture",
     "offscreen"
   ],
@@ -36,27 +33,21 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Unhooked Agent"
+    "default_title": "Unhooked"
   },
   "content_scripts": [
     {
       "matches": [
         "<all_urls>"
       ],
-      "js": [
-        "content.js"
-      ],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "agent/agent.html"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
+      "resources": ["env.json"],
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {

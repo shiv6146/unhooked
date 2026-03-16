@@ -16,6 +16,7 @@ build/
 *.swo
 *~
 .DS_Store
+.editorconfig
 
 # Logs
 logs/
@@ -127,3 +128,6 @@ Thumbs.db
 # User settings (optional - uncomment if you don't want to commit user-specific settings)
 # settings.json
 # user-config.json
+
+# API key config (never commit with real keys)
+extension/env.json

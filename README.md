@@ -1,167 +1,123 @@
-# Unhooked — AI-Powered Social Feed Agent
+# Unhooked — AI Feed Curator
 
-> **Chrome extension that scrolls your social feeds in the background, captures content via Gemini Vision, and generates intelligent digests.**
+> **Stop scrolling. Start living.**  
+> Unhooked is a Chrome extension that uses Google's Gemini Live API to scroll your social media feed in real-time, observe content through AI vision, and deliver a curated digest of what actually matters — so you never have to scroll yourself.
 
-Built for the [Gemini Live Agent Challenge](https://ai.google.dev/competition).
+<p align="center">
+  <img src="extension/icons/icon128.png" alt="Unhooked Logo" width="80"/>
+</p>
 
----
+## The Problem
 
-## Quick Start (Local)
+The average person spends **2.5 hours per day** scrolling social media, yet only **~13% of content** matches their interests. The rest is ads, memes, and noise. Users feel compelled to scroll "just in case" they miss something important.
 
-### 1. Start the Backend
+## The Solution
 
-```bash
-cd server
-uv venv && source .venv/bin/activate
-uv pip install -r requirements.txt
-cp .env.example .env   # paste your GEMINI_API_KEY
-python main.py          # starts on http://localhost:8080
-```
+Unhooked is a **read-only AI agent** that:
+1. **Watches your feed** through real-time video streaming via the Gemini Live API
+2. **Adaptively scrolls** — pausing on interesting content, speeding past ads and noise
+3. **Generates a curated digest** — a casual, skimmable summary of what the agent found
+4. **Tracks your time saved** — proving the value with noise percentage and time metrics
 
-### 2. Load the Extension
-
-1. Open `chrome://extensions/`
-2. Enable **Developer mode** (top-right)
-3. Click **Load unpacked** → select the `extension/` folder
-4. Pin Unhooked to your toolbar
-
-### 3. Use It
-
-1. Navigate to Twitter / Instagram / Reddit / LinkedIn
-2. Click the Unhooked icon → **Start**
-3. Browse freely — the agent scrolls, extracts, and analyzes in the background
-4. Click **Stop** or wait for the timer — a digest is generated automatically
-
----
+The agent is **completely read-only** — it can only scroll. It cannot like, save, follow, post, comment, or interact with any element on the page.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Chrome Extension                                         │
-│                                                           │
-│  Popup UI ←──→ Service Worker ←──→ Content Script         │
-│  (controls)     (orchestrator)     (scroll + extract)     │
-│                       │                                   │
-│                       ▼                                   │
-│              FastAPI Backend (localhost:8080)              │
-│              ├─ /analyze  (Gemini Vision)                 │
-│              └─ /digest   (Gemini Summarization)          │
-└──────────────────────────────────────────────────────────┘
-```
+```mermaid
+flowchart TB
+    subgraph Extension["Chrome Extension"]
+        Tab["Chrome Tab<br/>(Feed)"]
+        Offscreen["Offscreen Document<br/>1 FPS JPEG"]
+        Background["Background<br/>Service Worker"]
+        Content["Content Script<br/>Scroll State Machine"]
+        Popup["Popup UI<br/>Rich Digest + History"]
+    end
 
-### Extension (Chrome MV3)
+    subgraph Gemini["Gemini API"]
+        Live["Gemini Live API<br/>bidiGenerateContent<br/>WebSocket"]
+        DigestModel["gemini-2.5-flash<br/>generateContent"]
+    end
 
-| File | Role |
-|------|------|
-| `background.js` | Service worker — session management, screenshot capture, backend communication |
-| `content.js` | Content script — scrolling, post extraction, video capture, AI action execution |
-| `popup/` | User interface — start/stop, settings, digest viewer |
-| `agent/` | Ambient status page |
-
-### Server (Python FastAPI)
-
-| File | Role |
-|------|------|
-| `main.py` | FastAPI entry point with `/health`, `/analyze`, `/digest` routes |
-| `app/gemini.py` | Gemini 2.0 Flash vision integration — decodes base64 screenshots, returns actions |
-| `app/agent.py` | Orchestrator — action planning + digest generation |
-
----
-
-## Features
-
-- **Automated scrolling** with human-like behavior (variable timing, pauses, back-scrolling)
-- **Gemini Vision analysis** — screenshots sent to Gemini 2.0 Flash for intelligent navigation
-- **AI-powered digests** — session summaries with topics and sentiment via Gemini
-- **Video recording** — optional tab recording saved to Downloads
-- **Scheduled sessions** — recurring runs via `chrome.alarms`
-- **Multi-platform** — Twitter/X, Instagram, Reddit, LinkedIn, Facebook
-- **Privacy-first** — screenshots go to *your* backend, not a third party
-
----
-
-## Supported Sites
-
-| Platform | Selector Strategy |
-|----------|------------------|
-| Twitter / X | `article[data-testid="tweet"]` |
-| Instagram | `article` |
-| Reddit | `shreddit-post` |
-| LinkedIn | `.feed-shared-update-v2` |
-| Facebook | `[role="article"]` |
-| Other | Generic `article` fallback |
-
----
-
-## Configuration
-
-Settings are accessible via the popup ⚙️ button:
-
-| Setting | Default | Notes |
-|---------|---------|-------|
-| Duration | 5 min | Session length |
-| Scroll Speed | 2000 ms | Delay between scrolls |
-| Scroll Amount | 400 px | Pixels per scroll |
-| Video Capture | Off | Records visible tab |
-| Scheduling | Off | Auto-run at intervals |
-| Schedule Interval | 120 min | Time between auto-runs |
-
----
-
-## Development
-
-### Extension
-
-```bash
-# Make changes → reload in chrome://extensions/ → test
-# Background logs: chrome://extensions/ → Inspect service worker
-# Content logs: F12 on the scrolled page
-# Popup logs: right-click icon → Inspect popup
+    Tab -->|"tab capture"| Offscreen
+    Offscreen -->|"video frames"| Live
+    Live -->|"outputAudioTranscription"| Background
+    Background -->|"SCROLL_COMMAND<br/>PAUSE/SLOW/FAST/DOWN/UP"| Content
+    Background -->|"Session End<br/>generateContent"| DigestModel
+    DigestModel -->|"digest"| Background
+    Background -->|"display"| Popup
 ```
 
-### Server
+## Tech Stack
 
-```bash
-cd server
-source .venv/bin/activate
-python main.py  # auto-reloads on save with uvicorn
-```
+| Component | Technology |
+|-----------|-----------|
+| **Live Video Analysis** | Gemini Live API (`bidiGenerateContent`) via `@google/genai` JS SDK |
+| **Model (Real-time)** | `gemini-2.5-flash-native-audio-preview-12-2025` |
+| **Model (Digest)** | `gemini-2.5-flash` via `generateContent` |
+| **Extension** | Chrome Manifest V3 (service worker, offscreen document, content script) |
+| **Tab Capture** | `chrome.tabCapture` → offscreen canvas → JPEG frames at 1 FPS |
+| **Google Cloud** | Gemini API on `generativelanguage.googleapis.com` |
 
-### Adding a New Site
+## Key Features
 
-1. Add hostname detection in `content.js` → `detectSite()`
-2. Create a selector function (post, text, author, timestamp, link, image, video)
-3. Reload extension and test
+- **Gemini Live API integration** — Real-time WebSocket connection streams video frames and receives spoken observations via `outputAudioTranscription`
+- **Adaptive scroll state machine** — 5 states (NORMAL/SLOW/PAUSED/FAST/UP) with auto-resume timeouts
+- **Natural language observation parsing** — Extracts scroll commands from the model's spoken analysis
+- **Rich digest generation** — TL;DR, Must-Read cards, Worth-a-Look items, Skimmed Past categories, noise percentage
+- **Live action feed** — Real-time scroll decisions visible in the popup during sessions
+- **Session history & analytics** — Cumulative time saved, noise rate, session count
+- **Token usage tracking** — Per-session token count and estimated cost
+- **BYOK (Bring Your Own Key)** — API key stays local, only sent to Google's API endpoint
 
----
+## Setup
 
-## Project Structure
+### Prerequisites
+- Google Chrome 116+
+- A Google Gemini API key ([get one free](https://aistudio.google.com/apikey))
 
-```
-unhooked/
-├── extension/              # Chrome extension (load this as unpacked)
-│   ├── manifest.json
-│   ├── background.js
-│   ├── content.js
-│   ├── popup/
-│   ├── agent/
-│   └── icons/
-├── server/                 # FastAPI backend
-│   ├── main.py
-│   ├── app/
-│   │   ├── agent.py
-│   │   └── gemini.py
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
-├── infrastructure/         # Pulumi IaC (for Cloud Run deployment)
-├── LICENSE
-└── README.md               # this file
-```
+### Installation
 
----
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/shiv6146/unhooked.git
+   cd unhooked
+   ```
+
+2. **(Optional)** Pre-configure your API key:
+   ```bash
+   export GEMINI_API_KEY="your-key-here"
+   bash setup_env.sh
+   ```
+
+3. Load the extension in Chrome:
+   - Go to `chrome://extensions/`
+   - Enable **Developer mode** (top right)
+   - Click **Load unpacked** → select the `extension/` folder
+
+4. Navigate to any social media feed and click the Unhooked icon to start curating.
+
+### Supported Sites
+Twitter/X, Reddit, Instagram, LinkedIn, Facebook, TikTok, Hacker News, BBC, CNN, Reuters, TechCrunch, The Verge, and any website with scrollable content.
+
+## How It Works
+
+1. **Onboarding** — Enter your Gemini API key and set your curator goal (e.g., "AI news, startups")
+2. **Mission Brief** — Optionally add session-specific instructions and choose duration (3/5/10 min)
+3. **Start Curating** — The agent connects via the Gemini Live API, captures your tab as video, and begins adaptive scrolling
+4. **Real-time Analysis** — Gemini watches the feed and narrates observations. The extension parses these into scroll commands (pause on interesting content, skip ads)
+5. **Digest** — After the session, a rich digest is generated with Must-Read highlights, Worth-a-Look items, noise breakdown, and time saved
+
+## Hackathon
+
+Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/) (Feb 16 - Mar 16, 2026).
+
+**Category**: Live Agents — Real-time interaction (audio/vision)
+
+**Google Cloud Services Used**:
+- Gemini Live API (`bidiGenerateContent` via WebSocket) — real-time video analysis
+- Gemini API (`generateContent`) — digest generation
+- Google GenAI JS SDK (`@google/genai`)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT
