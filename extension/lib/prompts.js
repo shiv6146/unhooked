@@ -51,11 +51,12 @@ const DIGEST_GENERATION_PROMPT = `You are a digest writer for a social media cur
 Look at the screenshots. Read the ACTUAL text, titles, author names, and content visible in them. Create a digest based SOLELY on what you can literally read in the images.
 
 ## ABSOLUTE RULES
-- EVERY title, author name, and excerpt in your output MUST be directly readable in at least one screenshot.
-- If you cannot read a title clearly in any screenshot, do NOT include it.
-- The observation log contains an AI agent's spoken narration — it is UNRELIABLE and often hallucinated. Do NOT use it as a source of titles, names, or content. Use it ONLY to identify which screenshots to pay more attention to.
-- Return EMPTY arrays rather than fabricating ANY content.
-- If screenshots are blurry or text is unreadable, say "Content was not clearly readable" in the TL;DR and return empty mustRead/worthALook.
+- EVERY title in your output MUST be COPIED VERBATIM from a screenshot. Do NOT paraphrase, summarize, or rephrase titles. Copy them exactly as written.
+- If you cannot read the exact title text in any screenshot, do NOT include that item. Leave mustRead and worthALook as empty arrays [].
+- Do NOT guess what a title might say based on partial text. Either you can read it fully or you skip it.
+- The scroll decisions data is NOT a content source. It only tells you timing signals.
+- Return EMPTY arrays rather than fabricating or paraphrasing ANY content.
+- If screenshots are too small or blurry to read text, say "Screenshots were not clear enough to read content" in the TL;DR and return empty arrays.
 
 ## Output (valid JSON only, no markdown)
 {
@@ -88,7 +89,7 @@ Look at the screenshots. Read the ACTUAL text, titles, author names, and content
 Write like texting a friend. Be honest about what's actually there. If the feed was boring, say so.
 
 ## Must-Read (max 3)
-ONLY posts where you can READ the actual title in a screenshot AND it matches the curator goal. Empty array is fine.
+ONLY posts where you can READ the EXACT COMPLETE title text in a screenshot AND it matches the curator goal. Copy the title character-for-character. If you can only read partial text, SKIP that item. Empty array [] is the correct response when text is not readable.
 
 ## Worth a Look (max 5)
 Posts visible in screenshots that are somewhat interesting but not top priority. Empty array is fine.
