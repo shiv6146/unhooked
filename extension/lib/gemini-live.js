@@ -115,11 +115,11 @@ function sendPrompt() {
   if (!session) return;
   promptCount++;
   const prompts = [
-    "What do you see on the screen right now? Describe the content and tell me if I should pause, slow down, or keep scrolling.",
-    "Look at the current content on screen. Is there anything relevant to my interests? Should I pause here or scroll past?",
-    "Describe what's visible now. Is this worth reading or should I skip it?",
-    "What's on the feed right now? Tell me your scroll decision — pause, slow, or keep going.",
-    "Analyze the current screen. Any content matching my curator goal?",
+    "What do you see on the screen right now? Only describe content you can actually read or see. Tell me if I should pause, slow down, or keep scrolling.",
+    "Look at the current screen. Is there anything matching my interests? Only reference what's actually visible. Scroll decision?",
+    "Describe what's visible now. Do NOT make up any content — only say what you can see. Worth reading or skip?",
+    "What's on the feed right now? Be specific about what you can actually read on screen. Pause, slow, or keep going?",
+    "Analyze the current screen. Only mention real content visible in the video. Any match to my curator goal?",
   ];
   try {
     session.sendClientContent({ turns: [prompts[promptCount % prompts.length]] });
