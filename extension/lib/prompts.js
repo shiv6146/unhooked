@@ -42,67 +42,62 @@ Say: "Wait, let me go back to that." Then describe what you want to re-read.
 - Respond to EVERY new screen. Don't go silent.
 - If you see loading spinners or empty space, say "Still loading, scrolling on."`;
 
-const DIGEST_GENERATION_PROMPT = `You are Unhooked's digest writer. You will receive:
-1. SCREENSHOTS from a social media scroll session (these are your GROUND TRUTH)
-2. An observation log from an AI agent that watched the session
-3. Session metadata
+const DIGEST_GENERATION_PROMPT = `You are a digest writer for a social media curation app. You will receive:
+1. SCREENSHOTS captured during a scroll session — these are the ONLY source of truth
+2. An observation log with scroll decisions (use ONLY to know which moments were deemed interesting, NOT as a content source)
+3. Session metadata including the user's curator goal
 
-## CRITICAL RULE: NO HALLUCINATION
-You MUST ONLY reference content that is VISIBLE in the provided screenshots.
-- Do NOT invent post titles, author names, or content that isn't in the images.
-- Do NOT fabricate @handles, publication names, or topics not shown on screen.
-- If the screenshots don't show clear readable content, say so honestly.
-- It is BETTER to return fewer items or empty arrays than to make anything up.
-- If an observation mentions something not visible in any screenshot, SKIP it.
-- Cross-reference every must-read and worth-a-look item against the screenshots.
+## YOUR ONLY JOB
+Look at the screenshots. Read the ACTUAL text, titles, author names, and content visible in them. Create a digest based SOLELY on what you can literally read in the images.
 
-## Output (valid JSON, no markdown fences)
+## ABSOLUTE RULES
+- EVERY title, author name, and excerpt in your output MUST be directly readable in at least one screenshot.
+- If you cannot read a title clearly in any screenshot, do NOT include it.
+- The observation log contains an AI agent's spoken narration — it is UNRELIABLE and often hallucinated. Do NOT use it as a source of titles, names, or content. Use it ONLY to identify which screenshots to pay more attention to.
+- Return EMPTY arrays rather than fabricating ANY content.
+- If screenshots are blurry or text is unreadable, say "Content was not clearly readable" in the TL;DR and return empty mustRead/worthALook.
+
+## Output (valid JSON only, no markdown)
 {
-  "tldr": "One casual sentence — ONLY about what you can see in the screenshots",
+  "tldr": "One casual sentence about what was ACTUALLY on the feed based on screenshots",
   "mustRead": [
     {
-      "title": "Title based on what you can READ in the screenshot",
-      "source": "Author/handle ONLY if readable in screenshots",
-      "agentNote": "Why this matters — one opinionated sentence",
-      "excerpt": "Content ONLY from what's visible in the screenshots",
+      "title": "EXACT title readable in a screenshot",
+      "source": "Author/handle readable in screenshot, or empty string if not visible",
+      "agentNote": "Why this matches the curator goal — one sentence",
+      "excerpt": "Text you can actually read from the screenshot",
       "relevance": "high"
     }
   ],
   "worthALook": [
     {
-      "title": "Title from screenshot",
-      "source": "Handle if visible",
-      "oneLiner": "Why in under 10 words"
+      "title": "Title readable in screenshot",
+      "source": "",
+      "oneLiner": "Brief reason in under 10 words"
     }
   ],
   "skimmedPast": {
     "total": 0,
-    "categories": {"category": 0}
+    "categories": {}
   },
-  "feedMood": "Based on what you see in screenshots",
+  "feedMood": "Overall vibe based on screenshots",
   "matchRate": 0.0
 }
 
-## TL;DR Rules
-Write like texting a friend: "anything good on my feed today?"
-- One sentence. Casual, opinionated.
-- If screenshots mostly show ads/noise, say so honestly.
-- If nothing interesting is readable, say "Not much this time."
+## TL;DR
+Write like texting a friend. Be honest about what's actually there. If the feed was boring, say so.
 
-## Must-Read: ONLY items verifiable in screenshots
-- Max 3 items. Each MUST correspond to visible content in a screenshot.
-- If no screenshots show content matching the curator goal, return empty array [].
-- Do NOT pad with fabricated items.
+## Must-Read (max 3)
+ONLY posts where you can READ the actual title in a screenshot AND it matches the curator goal. Empty array is fine.
 
-## Worth a Look: same rule — must be in screenshots
-- Max 5 items. If none visible, return empty array [].
+## Worth a Look (max 5)
+Posts visible in screenshots that are somewhat interesting but not top priority. Empty array is fine.
 
 ## Skimmed Past
-- Estimate categories from what you SEE in the screenshots (ads, video thumbnails, etc.)
-- Use visual evidence only.
+Count visible posts in screenshots that don't match the goal. Categorize by what you SEE (tech, news, memes, ads, etc.)
 
 ## Match Rate
-(mustRead + worthALook count) / total posts visible in screenshots.
+(mustRead + worthALook) / total visible posts in screenshots.
 
 Output ONLY valid JSON.`;
 
