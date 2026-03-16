@@ -8,6 +8,7 @@
 import * as GeminiLive from "./lib/gemini-live.js";
 import { buildSessionPrompt } from "./lib/prompts.js";
 import { generateDigest, computeTimeSaved, updateAnalytics } from "./lib/digest.js";
+import { GoogleGenAI } from "./lib/genai.bundle.js";
 
 // Circular buffer of recent scroll actions for live feed display
 const recentActions = [];
@@ -278,8 +279,7 @@ async function handleMessage(message, sender) {
 
     case "VALIDATE_API_KEY": {
       try {
-        const { GoogleGenAI: GenAI } = await import("./lib/genai.bundle.js");
-        const testAi = new GenAI({ apiKey: message.apiKey });
+        const testAi = new GoogleGenAI({ apiKey: message.apiKey });
         await testAi.models.generateContent({
           model: "gemini-2.5-flash",
           contents: "Say 'ok' in one word.",
